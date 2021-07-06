@@ -235,7 +235,7 @@ func RunXCUITest(bundleID string, device ios.DeviceEntry) error {
 var closeChan = make(chan interface{})
 var closedChan = make(chan interface{})
 
-func runXUITestWithBundleIdsXcode12(bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry, conn *dtx.Connection) error {
+func runXUITestWithBundleIdsXcode12Ctx(ctx context.Context, bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry, conn *dtx.Connection) error {
 	testSessionId, _, xctestConfigPath, testConfig, testInfo, err := setupXcuiTest(device, bundleID, testRunnerBundleID, xctestConfigFileName)
 	if err != nil {
 		return err
@@ -289,6 +289,21 @@ func runXUITestWithBundleIdsXcode12(bundleID string, testRunnerBundleID string, 
 	if err != nil {
 		log.Error(err)
 	}
+
+	// TODO: need test and factor here
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			log.Infof("Killing WebDriverAgent with pid %d ...", pid)
+			err = pControl.KillProcess(pid)
+			if err != nil {
+				return err
+			}
+			log.Info("WDA killed with success")
+		}
+		return nil
+	}
+
 	<-closeChan
 	log.Infof("Killing WebDriverAgent with pid %d ...", pid)
 	err = pControl.KillProcess(pid)
@@ -302,11 +317,17 @@ func runXUITestWithBundleIdsXcode12(bundleID string, testRunnerBundleID string, 
 
 }
 
+func runXUITestWithBundleIdsXcode12(ctx context.Context, bundleID string, testRunnerBundleID string,
+	xctestConfigFileName string, device ios.DeviceEntry, conn *dtx.Connection) error {
+	return runXUITestWithBundleIdsXcode12Ctx(nil, bundleID, testRunnerBundleID, xctestConfigFileName,
+		device, conn)
+}
+
 func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
 
 	conn, err := dtx.NewConnection(device, testmanagerdiOS14)
 	if err == nil {
-		return runXUITestWithBundleIdsXcode12(bundleID, testRunnerBundleID, xctestConfigFileName, device, conn)
+		return runXUITestWithBundleIdsXcode12Ctx(ctx, bundleID, testRunnerBundleID, xctestConfigFileName, device, conn)
 	}
 	log.Debugf("Failed connecting to %s with %v, trying %s", testmanagerdiOS14, err, testmanagerd)
 
