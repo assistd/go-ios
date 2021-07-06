@@ -1,6 +1,7 @@
 package testmanagerd
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"time"
@@ -301,7 +302,7 @@ func runXUITestWithBundleIdsXcode12(bundleID string, testRunnerBundleID string, 
 
 }
 
-func RunXCUIWithBundleIds(bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
+func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
 
 	conn, err := dtx.NewConnection(device, testmanagerdiOS14)
 	if err == nil {
@@ -379,6 +380,21 @@ func RunXCUIWithBundleIds(bundleID string, testRunnerBundleID string, xctestConf
 	if err != nil {
 		log.Error(err)
 	}
+
+	// TODO: need test and factor here
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			log.Infof("Killing WebDriverAgent with pid %d ...", pid)
+			err = pControl.KillProcess(pid)
+			if err != nil {
+				return err
+			}
+			log.Info("WDA killed with success")
+		}
+		return nil
+	}
+
 	<-closeChan
 	log.Infof("Killing WebDriverAgent with pid %d ...", pid)
 	err = pControl.KillProcess(pid)
@@ -389,7 +405,10 @@ func RunXCUIWithBundleIds(bundleID string, testRunnerBundleID string, xctestConf
 	var signal interface{}
 	closedChan <- signal
 	return nil
+}
 
+func RunXCUIWithBundleIds(bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
+	return RunXCUIWithBundleIdsCtx(nil, bundleID, testRunnerBundleID, xctestConfigFileName, device)
 }
 
 func CloseXCUITestRunner() error {
