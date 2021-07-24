@@ -6,7 +6,9 @@ import (
 	"github.com/danielpaulus/go-ios/ios/imagemounter"
 	"github.com/danielpaulus/go-ios/ios/zipconduit"
 	"io/ioutil"
+	"path"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -39,6 +41,19 @@ func main() {
 }
 
 const version = "local-build"
+
+func initLog() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetReportCaller(true)
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return "", fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	})
+	log.SetLevel(log.InfoLevel)
+}
+
 
 // Main Exports main for testing
 func Main() {
@@ -126,6 +141,8 @@ The commands work as following:
 	} else {
 		log.SetFormatter(&log.JSONFormatter{})
 	}
+
+	initLog()
 
 	traceLevelEnabled, _ := arguments.Bool("--trace")
 	if traceLevelEnabled {
@@ -750,7 +767,7 @@ func readPair(device ios.DeviceEntry) {
 }
 
 func convertToJSONString(data interface{}) string {
-	b, err := json.Marshal(data)
+	b, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		fmt.Println(err)
 		return ""
