@@ -47,7 +47,7 @@ func Main() {
 Usage:
   ios listen [options]
   ios list [options] [--details]
-  ios info [--domain=<domain>] [options]
+  ios info [--domain=<domain>] [--key=<key>] [options]
   ios image list [options]
   ios image mount [--path=<imagepath>] [options]
   ios image auto [--basedir=<where_dev_images_are_stored>] [options]
@@ -238,7 +238,8 @@ The commands work as following:
 	b, _ = arguments.Bool("info")
 	if b {
 		domain, _ := arguments.String("--domain")
-		printDeviceInfo(device, domain)
+		key, _ := arguments.String("--key")
+		printDeviceInfo(device, domain, key)
 		return
 	}
 
@@ -689,8 +690,8 @@ func startListening() {
 	<-c
 }
 
-func printDeviceInfo(device ios.DeviceEntry, domain string) {
-	allValues, err := ios.GetDomainValuesPlist(device, domain)
+func printDeviceInfo(device ios.DeviceEntry, domain, key string) {
+	allValues, err := ios.GetDomainValuesPlist(device, domain, key)
 	if err != nil {
 		exitIfError("failed getting info", err)
 	}
