@@ -211,6 +211,17 @@ func getAllValuesResponseFromBytes(plistBytes []byte) GetAllValuesResponse {
 	return getAllValuesResponse
 }
 
+//GetDomainValuesPlist returns the domain info
+func GetDomainValuesPlist(device DeviceEntry, domain string) (interface{}, error) {
+	lockDownConn, err := ConnectLockdownWithSession(device)
+	if err != nil {
+		return struct{}{}, err
+	}
+	defer lockDownConn.Close()
+	resp, err := lockDownConn.GetValueForDomain("", domain)
+	return resp, err
+}
+
 //GetValuesPlist returns the full lockdown values response as a map, so it can be converted to JSON easily.
 func GetValuesPlist(device DeviceEntry) (map[string]interface{}, error) {
 	lockdownConnection, err := ConnectLockdownWithSession(device)
