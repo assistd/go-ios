@@ -74,6 +74,30 @@ func (conn Connection) SendFile(appFilePath string) error {
 	if info.IsDir() {
 		return conn.sendDirectory(appFilePath)
 	}
+
+	if strings.HasSuffix(info.Name(), ".conduit") {
+		init := newInitTransfer(appFilePath)
+		log.Debugf("sending inittransfer %+v", init)
+		bytes, err := conn.plistCodec.Encode(init)
+		if err != nil {
+			return err
+		}
+		err = conn.deviceConn.Send(bytes)
+		if err != nil {
+			return err
+		}
+
+		deviceStream := conn.deviceConn.Writer()
+		reader, _ := os.Open(appFilePath)
+		defer reader.Close()
+
+		_, err = io.Copy(deviceStream, reader)
+		if err != nil {
+			return err
+		}
+		return conn.waitForInstallation()
+	}
+
 	return conn.sendIpaFile(appFilePath)
 }
 func (conn Connection) sendDirectory(dir string) error {
@@ -315,4 +339,73 @@ func calculateCrc32(reader io.Reader) (uint32, error) {
 		return 0, err
 	}
 	return hash.Sum32(), nil
+}
+
+// writeIpaToConduitZipWriter convert .ipa file to a special zip that com.apple.streaming_zip_conduit recognized
+func writeIpaToConduitZipWriter(ipaFile string, deviceStream io.Writer) error {
+	tmpDir, err := ioutil.TempDir("", "prefix")
+	if err != nil {
+		return err
+	}
+	log.Debugf("created tempdir: %s", tmpDir)
+	defer func() {
+		err := os.RemoveAll(tmpDir)
+		if err != nil {
+			log.WithFields(log.Fields{"dir": tmpDir}).Warn("failed removing tempdir")
+		}
+	}()
+	log.Debug("unzipping..")
+	unzippedFiles, totalBytes, err := Unzip(ipaFile, tmpDir)
+	if err != nil {
+		return err
+	}
+
+	metainfFolder, metainfFile, err := addMetaInf(tmpDir, unzippedFiles, totalBytes)
+	if err != nil {
+		return err
+	}
+
+	log.Debug("writing meta inf")
+	err = AddFileToZip(deviceStream, metainfFolder, tmpDir)
+	if err != nil {
+		return err
+	}
+	err = AddFileToZip(deviceStream, metainfFile, tmpDir)
+	if err != nil {
+		return err
+	}
+	log.Debug("meta inf send successfully")
+
+	log.Debug("sending files....")
+
+	for _, file := range unzippedFiles {
+		err := AddFileToZip(deviceStream, file, tmpDir)
+		if err != nil {
+			return err
+		}
+	}
+	log.Debug("files sent, sending central header....")
+	_, err = deviceStream.Write(centralDirectoryHeader)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CovertIpaToConduitZip(ipaFile string, outDir string) error {
+	name := filepath.Base(ipaFile)
+	outName := path.Join(outDir, name + ".conduit")
+	outFile, err := os.Create(outName)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	err = writeIpaToConduitZipWriter(ipaFile, outFile)
+	if err != nil {
+		log.Errorln("convert ipa to conduit zip failed: ", err)
+		return err
+	}
+	return nil
 }

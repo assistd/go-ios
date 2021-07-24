@@ -78,6 +78,7 @@ Usage:
   ios dproxy [--binary]
   ios readpair [options]
   ios pcap [options] [--pid=<processID>] [--process=<processName>]
+  ios convert --path=<ipaOrAppFolder> [options]
   ios install --path=<ipaOrAppFolder> [options]
   ios apps [--system] [options]
   ios launch <bundleID> [options]
@@ -209,6 +210,15 @@ The commands work as following:
 	if b {
 		path, _ := arguments.String("--path")
 		installApp(device, path)
+		return
+	}
+
+	b, _ = arguments.Bool("convert")
+	if b {
+		ipa, _ := arguments.String("--path")
+		if err := zipconduit.CovertIpaToConduitZip(ipa, "./"); err != nil {
+			log.Errorln("covert failed: ", err)
+		}
 		return
 	}
 
