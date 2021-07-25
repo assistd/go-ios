@@ -54,7 +54,6 @@ func initLog() {
 	log.SetLevel(log.InfoLevel)
 }
 
-
 // Main Exports main for testing
 func Main() {
 	usage := fmt.Sprintf(`go-ios %s
@@ -216,8 +215,8 @@ The commands work as following:
 	b, _ = arguments.Bool("convert")
 	if b {
 		ipa, _ := arguments.String("--path")
-		if err := zipconduit.CovertIpaToConduitZip(ipa, "./"); err != nil {
-			log.Errorln("covert failed: ", err)
+		if err := zipconduit.ConvertIpaToConduitZip(device, ipa, "./"); err != nil {
+			log.Errorln("convert failed: ", err)
 		}
 		return
 	}
