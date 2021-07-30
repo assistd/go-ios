@@ -51,6 +51,10 @@ func (xdc XCTestManager_DaemonConnectionInterface) startExecutingTestPlanWithPro
 
 func (xdc XCTestManager_DaemonConnectionInterface) authorizeTestSessionWithProcessID(pid uint64) (bool, error) {
 	rply, err := xdc.IDEDaemonProxy.MethodCall("_IDE_authorizeTestSessionWithProcessID:", pid)
+	if err != nil {
+		log.Errorf("authorizeTestSessionWithProcessID: %v, err:%v", pid, err)
+		return false, err
+	}
 
 	returnValue := rply.Payload[0]
 	var val bool
@@ -65,6 +69,10 @@ func (xdc XCTestManager_DaemonConnectionInterface) authorizeTestSessionWithProce
 
 func (xdc XCTestManager_DaemonConnectionInterface) initiateSessionWithIdentifierAndCaps(uuid uuid.UUID, caps nskeyedarchiver.XCTCapabilities) (nskeyedarchiver.XCTCapabilities, error) {
 	rply, err := xdc.IDEDaemonProxy.MethodCall("_IDE_initiateSessionWithIdentifier:capabilities:", nskeyedarchiver.NewNSUUID(uuid), caps)
+	if err != nil {
+		log.Errorf("initiateSessionWithIdentifierAndCaps: %v, err:%v", uuid, err)
+		return nskeyedarchiver.XCTCapabilities{}, err
+	}
 
 	returnValue := rply.Payload[0]
 	var val nskeyedarchiver.XCTCapabilities
@@ -78,6 +86,10 @@ func (xdc XCTestManager_DaemonConnectionInterface) initiateSessionWithIdentifier
 }
 func (xdc XCTestManager_DaemonConnectionInterface) initiateControlSessionWithCapabilities(caps nskeyedarchiver.XCTCapabilities) (nskeyedarchiver.XCTCapabilities, error) {
 	rply, err := xdc.IDEDaemonProxy.MethodCall("_IDE_initiateControlSessionWithCapabilities:", caps)
+	if err != nil {
+		log.Errorf("initiateControlSessionWithCapabilities: %v", err)
+		return nskeyedarchiver.XCTCapabilities{}, err
+	}
 
 	returnValue := rply.Payload[0]
 	var val nskeyedarchiver.XCTCapabilities
@@ -510,10 +522,11 @@ func setupXcuiTest(device ios.DeviceEntry, bundleID string, testRunnerBundleID s
 		return uuid.UUID{}, semver.Version{}, "", nskeyedarchiver.XCTestConfiguration{}, testInfo{}, err
 	}
 	houseArrestService, err := house_arrest.New(device, testRunnerBundleID)
-	defer houseArrestService.Close()
 	if err != nil {
 		return uuid.UUID{}, semver.Version{}, "", nskeyedarchiver.XCTestConfiguration{}, testInfo{}, err
 	}
+	defer houseArrestService.Close()
+
 	testConfigPath, testConfig, err := createTestConfigOnDevice(testSessionID, info, houseArrestService, xctestConfigFileName)
 	if err != nil {
 		return uuid.UUID{}, semver.Version{}, "", nskeyedarchiver.XCTestConfiguration{}, testInfo{}, err
