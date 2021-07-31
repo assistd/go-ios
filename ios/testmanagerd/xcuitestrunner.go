@@ -264,6 +264,8 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 		return err
 	}
 
+	XcodeVersion := uint64(29) // 36
+
 	var testmanagerdName string
 	if version.Major() >= 14 {
 		testmanagerdName = testmanagerdiOS14
@@ -287,11 +289,11 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 	caps, err := ideDaemonProxy.daemonConnection.initiateControlSessionWithCapabilities(nskeyedarchiver.XCTCapabilities{})
 	if err != nil {
 		log.Debug("expected err", err)
-		resp, err := ideDaemonProxy.daemonConnection.initiateControlSessionWithProtocolVersion(36)
+		resp, err := ideDaemonProxy.daemonConnection.initiateControlSessionWithProtocolVersion(XcodeVersion)
 		if err != nil {
 			log.Errorf("err initiateControlSessionWithProtocolVersion: %v, %v", resp, err)
 		} else {
-			log.Debugf("got protocolversion:%d", resp)
+			log.Infof("got protocolversion:%d", resp)
 		}
 	}
 
@@ -314,7 +316,7 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 	caps2, err := ideDaemonProxy2.daemonConnection.initiateSessionWithIdentifierAndCaps(testSessionId, localCaps)
 	if err != nil {
 		log.Debugf("error initiateSessionWithIdentifierAndCaps, %+v", err)
-		protocol, err := ideDaemonProxy2.daemonConnection.initiateSessionWithIdentifier(testSessionId, 36)
+		protocol, err := ideDaemonProxy2.daemonConnection.initiateSessionWithIdentifier(testSessionId, XcodeVersion)
 		if err != nil {
 			log.Errorf("err initiateSessionWithIdentifier: %v, %v", protocol, err)
 		} else {
@@ -332,10 +334,10 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 	if err != nil {
 		return err
 	}
-	log.Debugf("Runner started with pid:%d, waiting for testBundleReady", pid)
+	log.Infof("Runner started with pid:%d, waiting for testBundleReady", pid)
 
 	ideInterfaceChannel := ideDaemonProxy2.dtxConnection.ForChannelRequest(ProxyDispatcher{id: "emty"})
-	err = ideDaemonProxy2.daemonConnection.startExecutingTestPlanWithProtocolVersion(ideInterfaceChannel, 36)
+	err = ideDaemonProxy2.daemonConnection.startExecutingTestPlanWithProtocolVersion(ideInterfaceChannel, XcodeVersion)
 	if err != nil {
 		log.Error(err)
 	}
@@ -344,7 +346,7 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 		_, err = ideDaemonProxy.daemonConnection.authorizeTestSessionWithProcessID(pid)
 		log.Debugf("authorizing test session for pid %d, err:%v", pid, err)
 	} else if version.Major() > 9 {
-		err = ideDaemonProxy.daemonConnection.initiateControlSessionForTestProcessID(pid, 36)
+		err = ideDaemonProxy.daemonConnection.initiateControlSessionForTestProcessID(pid, XcodeVersion)
 	} else {
 		// TODO: support iOS 9
 		log.Fatalf("not support iOS version <= 9")
