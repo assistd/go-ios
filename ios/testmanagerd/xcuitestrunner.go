@@ -255,7 +255,7 @@ func runXUITestWithBundleIdsXcode12Ctx(ctx context.Context, bundleID string, tes
 	defer conn.Close()
 	ideDaemonProxy := newDtxProxyWithConfig(conn, testConfig)
 
-	conn2, err := dtx.NewConnection(device, testmanagerdiOS14)
+	conn2, err := dtx.NewConnection(device, testmanagerd)
 	if err != nil {
 		return err
 	}
@@ -265,9 +265,10 @@ func runXUITestWithBundleIdsXcode12Ctx(ctx context.Context, bundleID string, tes
 	ideDaemonProxy2.ideInterface.testConfig = testConfig
 	caps, err := ideDaemonProxy.daemonConnection.initiateControlSessionWithCapabilities(nskeyedarchiver.XCTCapabilities{})
 	if err != nil {
-		return err
+		log.Errorln("initiateControlSessionWithCapabilities error: ", err)
+	} else {
+		log.Debug(caps)
 	}
-	log.Debug(caps)
 	localCaps := nskeyedarchiver.XCTCapabilities{CapabilitiesDictionary: map[string]interface{}{
 		"XCTIssue capability":     uint64(1),
 		"skipped test capability": uint64(1),
@@ -276,9 +277,11 @@ func runXUITestWithBundleIdsXcode12Ctx(ctx context.Context, bundleID string, tes
 
 	caps2, err := ideDaemonProxy2.daemonConnection.initiateSessionWithIdentifierAndCaps(testSessionId, localCaps)
 	if err != nil {
-		return err
+		log.Errorln("initiateSessionWithIdentifierAndCaps error: ", err)
+	} else {
+		log.Debug(caps2)
 	}
-	log.Debug(caps2)
+
 	pControl, err := instruments.NewProcessControl(device)
 	if err != nil {
 		return err
@@ -289,17 +292,18 @@ func runXUITestWithBundleIdsXcode12Ctx(ctx context.Context, bundleID string, tes
 	if err != nil {
 		return err
 	}
-	log.Debugf("Runner started with pid:%d, waiting for testBundleReady", pid)
+	log.Infof("Runner started with pid:%d, waiting for testBundleReady", pid)
 
 	ideInterfaceChannel := ideDaemonProxy2.dtxConnection.ForChannelRequest(ProxyDispatcher{id: "emty"})
-
-	time.Sleep(time.Second)
-
-	success, _ := ideDaemonProxy.daemonConnection.authorizeTestSessionWithProcessID(pid)
-	log.Debugf("authorizing test session for pid %d successful %t", pid, success)
 	err = ideDaemonProxy2.daemonConnection.startExecutingTestPlanWithProtocolVersion(ideInterfaceChannel, 36)
 	if err != nil {
 		log.Error(err)
+	}
+
+	success, err := ideDaemonProxy.daemonConnection.authorizeTestSessionWithProcessID(pid)
+	if err != nil {
+		log.Errorf("authorizing test session for pid %d successful %t", pid, success)
+		return err
 	}
 
 	// TODO: need test and factor here
@@ -335,20 +339,37 @@ func runXUITestWithBundleIdsXcode12(ctx context.Context, bundleID string, testRu
 		device, conn)
 }
 
-func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
-
-	conn, err := dtx.NewConnection(device, testmanagerdiOS14)
-	if err == nil {
-		return runXUITestWithBundleIdsXcode12Ctx(ctx, bundleID, testRunnerBundleID, xctestConfigFileName, device, conn)
-	}
-	log.Debugf("Failed connecting to %s with %v, trying %s", testmanagerdiOS14, err, testmanagerd)
-
-	conn, err = dtx.NewConnection(device, testmanagerd)
+func getIOSVersion(device ios.DeviceEntry) (*semver.Version, error) {
+	versionResp, err := ios.GetValues(device)
 	if err != nil {
+		return nil, err
+	}
+	version := versionResp.Value.ProductVersion
+	v, err := semver.NewVersion(version)
+	return v, err
+}
+
+func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBundleID string, xctestConfigFileName string, device ios.DeviceEntry) error {
+	version, err := getIOSVersion(device)
+	if err != nil {
+		log.Errorln("get ios version failed:", err)
 		return err
 	}
 
-	testSessionId, version, xctestConfigPath, testConfig, testInfo, err := setupXcuiTest(device, bundleID, testRunnerBundleID, xctestConfigFileName)
+	var testmanagerdName string
+	if version.Major() >= 14 {
+		testmanagerdName = testmanagerdiOS14
+	} else {
+		testmanagerdName = testmanagerd
+	}
+
+	conn, err := dtx.NewConnection(device, testmanagerdName)
+	if err != nil {
+		log.Errorf("Failed connecting to %v failed: %v", testmanagerdName, err)
+		return err
+	}
+
+	testSessionId, _, xctestConfigPath, testConfig, testInfo, err := setupXcuiTest(device, bundleID, testRunnerBundleID, xctestConfigFileName)
 	if err != nil {
 		return err
 	}
@@ -366,7 +387,7 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 		}
 	}
 
-	conn2, err := dtx.NewConnection(device, testmanagerd)
+	conn2, err := dtx.NewConnection(device, testmanagerdName)
 	if err != nil {
 		return err
 	}
