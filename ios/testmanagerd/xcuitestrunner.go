@@ -111,6 +111,10 @@ func (xdc XCTestManager_DaemonConnectionInterface) initiateSessionWithIdentifier
 		"/Applications/Xcode.app",
 		protocolVersion)
 
+	if err != nil {
+		return 0, err
+	}
+
 	returnValue := rply.Payload[0]
 	var val uint64
 	var ok bool
