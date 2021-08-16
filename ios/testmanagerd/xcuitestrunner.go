@@ -349,11 +349,11 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 	if version.Major() >= 12 {
 		_, err = ideDaemonProxy.daemonConnection.authorizeTestSessionWithProcessID(pid)
 		log.Debugf("authorizing test session for pid %d, err:%v", pid, err)
-	} else if version.Major() > 9 {
+	} else if version.Major() >= 9 {
 		err = ideDaemonProxy.daemonConnection.initiateControlSessionForTestProcessID(pid, XcodeVersion)
 	} else {
-		// TODO: support iOS 9
-		log.Fatalf("not support iOS version <= 9")
+		// TODO: support iOS Version < 9
+		log.Fatalf("iOS version:%d, not support iOS version < 9", version.Major())
 	}
 
 	if err != nil {
@@ -425,12 +425,12 @@ func startTestRunner12(pControl *instruments.ProcessControl, xctestConfigPath st
 
 		"CA_ASSERT_MAIN_THREAD_TRANSACTIONS": "0",
 		"CA_DEBUG_TRANSACTIONS":              "0",
-		"MTC_CRASH_ON_REPORT":             "1",
-		"NSUnbufferedIO":                  "YES",
-		"SQLITE_ENABLE_THREAD_ASSERTIONS": "1",
-		"XCTestBundlePath":                testBundlePath,
-		"XCTestConfigurationFilePath":     "",
-		"XCTestSessionIdentifier":         sessionIdentifier,
+		"MTC_CRASH_ON_REPORT":                "1",
+		"NSUnbufferedIO":                     "YES",
+		"SQLITE_ENABLE_THREAD_ASSERTIONS":    "1",
+		"XCTestBundlePath":                   testBundlePath,
+		"XCTestConfigurationFilePath":        "",
+		"XCTestSessionIdentifier":            sessionIdentifier,
 	}
 
 	if version.Major() > 11 {
