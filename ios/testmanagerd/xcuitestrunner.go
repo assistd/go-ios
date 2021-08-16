@@ -334,7 +334,7 @@ func RunXCUIWithBundleIdsCtx(ctx context.Context, bundleID string, testRunnerBun
 	}
 	defer pControl.Close()
 
-	pid, err := startTestRunner12(pControl, xctestConfigPath, testRunnerBundleID, testSessionId.String(), testInfo.testrunnerAppPath+"/PlugIns/"+xctestConfigFileName)
+	pid, err := startTestRunner12(pControl, xctestConfigPath, testRunnerBundleID, testSessionId.String(), testInfo.testrunnerAppPath+"/PlugIns/"+xctestConfigFileName, version)
 	if err != nil {
 		return err
 	}
@@ -416,7 +416,8 @@ func startTestRunner(pControl *instruments.ProcessControl, xctestConfigPath stri
 
 }
 
-func startTestRunner12(pControl *instruments.ProcessControl, xctestConfigPath string, bundleID string, sessionIdentifier string, testBundlePath string) (uint64, error) {
+func startTestRunner12(pControl *instruments.ProcessControl, xctestConfigPath string, bundleID string, sessionIdentifier string, testBundlePath string, version *semver.Version) (uint64, error) {
+
 	args := []interface{}{
 		"-NSTreatUnknownArgumentsAsOpen", "NO", "-ApplePersistenceIgnoreState", "YES",
 	}
@@ -424,19 +425,24 @@ func startTestRunner12(pControl *instruments.ProcessControl, xctestConfigPath st
 
 		"CA_ASSERT_MAIN_THREAD_TRANSACTIONS": "0",
 		"CA_DEBUG_TRANSACTIONS":              "0",
-		"DYLD_INSERT_LIBRARIES":              "/Developer/usr/lib/libMainThreadChecker.dylib",
-
 		"MTC_CRASH_ON_REPORT":             "1",
 		"NSUnbufferedIO":                  "YES",
-		"OS_ACTIVITY_DT_MODE":             "YES",
 		"SQLITE_ENABLE_THREAD_ASSERTIONS": "1",
 		"XCTestBundlePath":                testBundlePath,
 		"XCTestConfigurationFilePath":     "",
 		"XCTestSessionIdentifier":         sessionIdentifier,
 	}
+
+	if version.Major() > 11 {
+		env["DYLD_INSERT_LIBRARIES"] = "/Developer/usr/lib/libMainThreadChecker.dylib"
+		env["OS_ACTIVITY_DT_MODE"] = "YES"
+	}
+
 	opts := map[string]interface{}{
 		"StartSuspendedKey": uint64(0),
-		"ActivateSuspended": uint64(1),
+	}
+	if version.Major() > 12 {
+		opts["ActivateSuspended"] = uint64(1)
 	}
 
 	return pControl.StartProcess(bundleID, env, args, opts)
