@@ -101,6 +101,14 @@ func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
 		return err
 	}
 
+	header := newHeader()
+	header.fillChecksum()
+	log.Debug("writing header")
+	_, err = outFile.Write(header.bytes())
+	if err != nil {
+		return nil
+	}
+
 	err = packDirToConduitStream(tmpDir, outFile)
 	if err != nil {
 		return err
@@ -126,14 +134,6 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 	metainfFolder, metainfFile, err := addMetaInf(dir, unzippedFiles, uint64(totalBytes))
 	if err != nil {
 		return err
-	}
-
-	header := newHeader()
-	header.fillChecksum()
-	log.Debug("writing header")
-	_, err = stream.Write(header.bytes())
-	if err != nil {
-		return nil
 	}
 
 	log.Debug("writing meta inf")
