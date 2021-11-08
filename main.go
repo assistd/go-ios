@@ -182,6 +182,15 @@ The commands work as following:
 		return
 	}
 
+	b, _ = arguments.Bool("convert")
+	if b {
+		ipa, _ := arguments.String("--path")
+		if err := zipconduit.ConvertIpaToConduitZip(ipa, "./"); err != nil {
+			log.Errorln("convert failed: ", err)
+		}
+		return
+	}
+
 	udid, _ := arguments.String("--udid")
 	device, err := ios.GetDevice(udid)
 	exitIfError("error getting devicelist", err)
@@ -209,15 +218,6 @@ The commands work as following:
 	if b {
 		path, _ := arguments.String("--path")
 		installApp(device, path)
-		return
-	}
-
-	b, _ = arguments.Bool("convert")
-	if b {
-		ipa, _ := arguments.String("--path")
-		if err := zipconduit.ConvertIpaToConduitZip(device, ipa, "./"); err != nil {
-			log.Errorln("convert failed: ", err)
-		}
 		return
 	}
 
