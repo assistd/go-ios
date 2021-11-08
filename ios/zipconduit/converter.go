@@ -1,13 +1,79 @@
 package zipconduit
 
 import (
+	"bytes"
+	"encoding/binary"
 	log "github.com/sirupsen/logrus"
+	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 )
+
+const (
+	headerMagic = 0x57545354  // WTST
+	headerVersion = 0x01
+	headerSize = 36
+)
+
+type _inner struct {
+	Magic          uint32
+	Version        uint32
+	PayloadLength  uint64
+	PayloadMD5     [16]byte
+	HeaderChecksum uint32
+}
+
+type conduitZipHeader struct {
+	_inner
+	HeaderChecksum uint32
+}
+
+func newHeader() *conduitZipHeader {
+	return &conduitZipHeader{
+		_inner: _inner{
+			Magic: headerMagic,
+			Version: headerVersion,
+		},
+	}
+}
+
+func (c *conduitZipHeader) fillChecksum() {
+	buf := &bytes.Buffer{}
+	_ = binary.Write(buf, binary.BigEndian, c._inner)
+	c.HeaderChecksum = crc32.ChecksumIEEE(buf.Bytes())
+}
+
+func (c *conduitZipHeader) isValid() bool {
+	buf := &bytes.Buffer{}
+	_ = binary.Write(buf, binary.BigEndian, c._inner)
+	return c.Magic == headerMagic &&
+		c.HeaderChecksum == crc32.ChecksumIEEE(buf.Bytes())
+}
+
+func (c *conduitZipHeader) bytes() []byte {
+	buf := &bytes.Buffer{}
+	_ = binary.Write(buf, binary.BigEndian, c)
+	return buf.Bytes()
+}
+
+func IsConduitZip(ipaApp string) (bool, error) {
+	f, err := os.Open(ipaApp)
+	if err != nil {
+		return false, err
+	}
+
+	defer f.Close()
+	header := &conduitZipHeader{}
+	err = binary.Read(f, binary.BigEndian, header)
+	if err != nil {
+		return false, err
+	}
+
+	return header.isValid(), nil
+}
 
 func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
 	appName := filepath.Base(ipaApp)
@@ -62,6 +128,15 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	header := newHeader()
+	header.fillChecksum()
+	log.Debug("writing header")
+	_, err = stream.Write(header.bytes())
+	if err != nil {
+		return nil
+	}
+
 	log.Debug("writing meta inf")
 	err = AddFileToZip(stream, metainfFolder, dir)
 	if err != nil {

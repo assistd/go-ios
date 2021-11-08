@@ -72,9 +72,12 @@ func (conn Connection) SendFile(appFilePath string) error {
 	if info.IsDir() {
 		return conn.sendDirectory(appFilePath)
 	}
-	if strings.HasSuffix(info.Name(), ".conduit") {
+
+	isCondZip, err := IsConduitZip(appFilePath)
+	if isCondZip {
 		return conn.InstallConduitApp(appFilePath)
 	}
+
 	return conn.InstallIpaApp(appFilePath)
 }
 
@@ -234,6 +237,13 @@ func (conn Connection) InstallConduitApp(conduitApp string) error {
 		return err
 	}
 	defer reader.Close()
+
+	// skip header
+	header := &conduitZipHeader{}
+	err = binary.Read(reader, binary.BigEndian, header)
+	if err != nil {
+		return err
+	}
 
 	err = conn.initTransfer(conduitApp)
 	if err != nil {
