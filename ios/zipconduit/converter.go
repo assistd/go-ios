@@ -23,7 +23,6 @@ type _inner struct {
 	Version        uint32
 	PayloadLength  uint64
 	PayloadMD5     [16]byte
-	HeaderChecksum uint32
 }
 
 type conduitZipHeader struct {
