@@ -124,8 +124,10 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 			if err != nil {
 				return err
 			}
-			totalBytes += info.Size()
-			unzippedFiles = append(unzippedFiles, path)
+			if dir != path {
+				totalBytes += info.Size()
+				unzippedFiles = append(unzippedFiles, path)
+			}
 			return nil
 		})
 	if err != nil {
