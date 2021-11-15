@@ -162,3 +162,15 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 	}
 	return nil
 }
+
+func PackDirToConduitStream(dir string, stream io.Writer) error {
+	header := newHeader()
+	header.fillChecksum()
+	log.Debug("writing header")
+	_, err := stream.Write(header.bytes())
+	if err != nil {
+		return nil
+	}
+
+	return packDirToConduitStream(dir, stream)
+}

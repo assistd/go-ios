@@ -186,9 +186,28 @@ The commands work as following:
 
 	b, _ = arguments.Bool("convert")
 	if b {
-		ipa, _ := arguments.String("--path")
-		if err := zipconduit.ConvertIpaToConduitZip(ipa, "./"); err != nil {
+		p, _ := arguments.String("--path")
+
+		f, err := os.Stat(p)
+		if err != nil {
 			log.Errorln("convert failed: ", err)
+			return
+		}
+
+		if f.IsDir() {
+			out, err := os.Create("out.wzip")
+			if err != nil {
+				log.Errorln("create out file failed: ", err)
+				return
+			}
+			defer out.Close()
+			if err := zipconduit.PackDirToConduitStream(p, out); err != nil {
+				log.Errorln("convert failed: ", err)
+			}
+		} else {
+			if err := zipconduit.ConvertIpaToConduitZip(p, "./"); err != nil {
+				log.Errorln("convert failed: ", err)
+			}
 		}
 		return
 	}
