@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -119,12 +120,13 @@ func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
 func packDirToConduitStream(dir string, stream io.Writer) error {
 	var totalBytes int64
 	var unzippedFiles []string
+	metainfPath := path.Join(dir, "META-INF")
 	err := filepath.Walk(dir,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			if dir != path {
+			if dir != path  && !strings.HasPrefix(path, metainfPath) {
 				totalBytes += info.Size()
 				unzippedFiles = append(unzippedFiles, path)
 			}
