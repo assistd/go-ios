@@ -4,8 +4,10 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net"
+	"runtime"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -43,7 +45,17 @@ func NewDeviceConnectionWithConn(conn net.Conn) *DeviceConnection {
 
 //ConnectToSocketAddress connects to the USB multiplexer with a specified socket addres
 func (conn *DeviceConnection) connectToSocketAddress(socketAddress string) error {
-	c, err := net.Dial("unix", socketAddress)
+	var network, address string
+	switch runtime.GOOS {
+	case "darwin", "android", "linux":
+		network, address = "unix", "/var/run/usbmuxd"
+	case "windows":
+		network, address = "tcp", "127.0.0.1:27015" //虫洞 37015
+	default:
+		return fmt.Errorf("raw dial: unsupported system: %s", runtime.GOOS)
+	}
+
+	c, err := net.Dial(network, address)
 	if err != nil {
 		return err
 	}
