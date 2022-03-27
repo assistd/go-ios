@@ -37,11 +37,11 @@ func connectionAccept(l net.Listener, deviceID int, phonePort uint16) {
 			continue
 		}
 		log.WithFields(log.Fields{"conn": fmt.Sprintf("%#v", clientConn)}).Info("new client connected")
-		go startNewProxyConnection(clientConn, deviceID, phonePort)
+		go StartNewProxyConnection(clientConn, deviceID, phonePort)
 	}
 }
 
-func startNewProxyConnection(clientConn net.Conn, deviceID int, phonePort uint16) {
+func StartNewProxyConnection(clientConn net.Conn, deviceID int, phonePort uint16) {
 	usbmuxConn, err := ios.NewUsbMuxConnectionSimple()
 	if err != nil {
 		log.Errorf("could not connect to usbmuxd: %+v", err)

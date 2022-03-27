@@ -205,7 +205,7 @@ The commands work as following:
 				log.Errorln("convert failed: ", err)
 			}
 		} else {
-			if err := zipconduit.ConvertIpaToConduitZip(p, "./"); err != nil {
+			if _, err := zipconduit.ConvertIpaToConduitZip(p, "./"); err != nil {
 				log.Errorln("convert failed: ", err)
 			}
 		}

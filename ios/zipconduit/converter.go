@@ -75,19 +75,19 @@ func IsConduitZip(ipaApp string) (bool, error) {
 	return header.isValid(), nil
 }
 
-func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
+func ConvertIpaToConduitZip(ipaApp string, outDir string) (string, error) {
 	appName := filepath.Base(ipaApp)
 	outName := path.Join(outDir, appName+".conduit")
 	outFile, err := os.Create(outName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer outFile.Close()
 
 	pwd, _ := os.Getwd()
 	tmpDir, err := ioutil.TempDir(pwd, "temp")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	defer func() {
@@ -99,7 +99,7 @@ func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
 
 	_, _, err = Unzip(ipaApp, tmpDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	header := newHeader()
@@ -107,14 +107,14 @@ func ConvertIpaToConduitZip(ipaApp string, outDir string) error {
 	log.Debug("writing header")
 	_, err = outFile.Write(header.bytes())
 	if err != nil {
-		return nil
+		return "", err
 	}
 
 	err = packDirToConduitStream(tmpDir, outFile)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return outName, nil
 }
 
 func packDirToConduitStream(dir string, stream io.Writer) error {
