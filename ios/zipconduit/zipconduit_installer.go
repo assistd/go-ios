@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 )
 
@@ -176,6 +177,11 @@ func AddFileToZip(writer io.Writer, filename string, tmpdir string) error {
 	info, err := fileToZip.Stat()
 	if err != nil {
 		return err
+	}
+
+	if runtime.GOOS == "windows" {
+		filename = strings.ReplaceAll(filename, "\\", "/")
+		tmpdir = strings.ReplaceAll(tmpdir, "\\", "/")
 	}
 
 	// Using FileInfoHeader() above only uses the basename of the file. If we want
