@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -99,6 +100,7 @@ func (d *DebugProxy) Launch(device ios.DeviceEntry, binaryMode bool) error {
 	}
 	d.setupDirectory()
 	listener, err := net.Listen("unix", ios.DefaultUsbmuxdSocket)
+	os.Chmod(ios.DefaultUsbmuxdSocket, 0777)
 	if err != nil {
 		log.Error("Could not listen on usbmuxd socket, do I have access permissions?", err)
 		return err
@@ -144,13 +146,35 @@ func startProxyConnection(conn net.Conn, originalSocket string, pairRecord ios.P
 	if binaryMode {
 		binOnUnixSocket := BinaryForwardingProxy{ios.NewDeviceConnectionWithConn(conn), NewBinDumpOnly("does not matter", filepath.Join(info.ConnectionPath, "rawbindump-from-host-service.bin"), logger)}
 		binToDevice := BinaryForwardingProxy{devConn, NewBinDumpOnly("does not matter", filepath.Join(info.ConnectionPath, "rawbindump-from-device.bin"), logger)}
-		go proxyBinDumpConnection(&p, binOnUnixSocket, binToDevice)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Recovered a panic: %v", r)
+					debugProxy.Close()
+					debug.PrintStack()
+					os.Exit(1)
+					return
+				}
+			}()
+			proxyBinDumpConnection(&p, binOnUnixSocket, binToDevice)
+		}()
 		return
 	}
 	connListeningOnUnixSocket := ios.NewUsbMuxConnection(ios.NewDeviceConnectionWithConn(conn))
 	connectionToDevice := ios.NewUsbMuxConnection(devConn)
-	go proxyUsbMuxConnection(&p, connListeningOnUnixSocket, connectionToDevice)
 
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("Recovered a panic: %v", r)
+				debugProxy.Close()
+				debug.PrintStack()
+				os.Exit(1)
+				return
+			}
+		}()
+		proxyUsbMuxConnection(&p, connListeningOnUnixSocket, connectionToDevice)
+	}()
 }
 
 //Close moves /var/run/usbmuxd.real back to /var/run/usbmuxd and disconnects all active proxy connections
