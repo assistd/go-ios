@@ -46,13 +46,17 @@ func NewDeviceConnectionWithConn(conn net.Conn) *DeviceConnection {
 //ConnectToSocketAddress connects to the USB multiplexer with a specified socket addres
 func (conn *DeviceConnection) connectToSocketAddress(socketAddress string) error {
 	var network, address string
-	switch runtime.GOOS {
-	case "darwin", "android", "linux":
-		network, address = "unix", "/var/run/usbmuxd"
-	case "windows":
-		network, address = "tcp", "127.0.0.1:27015" //虫洞 37015
-	default:
-		return fmt.Errorf("raw dial: unsupported system: %s", runtime.GOOS)
+	if socketAddress == DefaultUsbmuxdSocket {
+		switch runtime.GOOS {
+		case "darwin", "android", "linux":
+			network, address = "unix", DefaultUsbmuxdSocket
+		case "windows":
+			network, address = "tcp", DefaultUsbmuxdSocketForWin
+		default:
+			return fmt.Errorf("raw dial: unsupported system: %s", runtime.GOOS)
+		}
+	} else {
+		network, address = "unix", socketAddress
 	}
 
 	c, err := net.Dial(network, address)

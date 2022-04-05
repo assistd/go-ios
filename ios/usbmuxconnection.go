@@ -11,6 +11,7 @@ import (
 
 //DefaultUsbmuxdSocket this is the unix domain socket address to connect to.
 const DefaultUsbmuxdSocket = "/var/run/usbmuxd"
+const DefaultUsbmuxdSocketForWin = "127.0.0.1:27015" //虫洞 37015
 
 //UsbMuxConnection can send and read messages to the usbmuxd process to manage pairrecors, listen for device changes
 //and connect to services on the phone. Usually messages follow a  request-response pattern. there is a tag integer
