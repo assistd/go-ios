@@ -2,6 +2,8 @@ package installationproxy
 
 import (
 	"bytes"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 
 	ios "github.com/danielpaulus/go-ios/ios"
 	"howett.net/plist"
@@ -126,6 +128,55 @@ func browseUserApps() map[string]interface{} {
 		"ShowLaunchProhibitedApps": true,
 	}
 	return map[string]interface{}{"ClientOptions": clientOptions, "Command": "Browse"}
+}
+
+func checkFinished(dict map[string]interface{}) (bool, error) {
+	if val, ok := dict["Error"]; ok {
+		return false, fmt.Errorf("received uninstall error: %v", val)
+	}
+	if val, ok := dict["Status"]; ok {
+		if "Complete" == val {
+			log.Info("uninstall done")
+			return true, nil
+		}
+		log.Infof("uninstall status: %s", val)
+		return false, nil
+	}
+	return false, fmt.Errorf("unknown status update: %+v", dict)
+}
+
+func (c *Connection) Uninstall(bundleId string) error {
+	options := map[string]interface{}{}
+	uninstallCommand := map[string]interface{}{
+		"Command":               "Uninstall",
+		"ApplicationIdentifier": bundleId,
+		"ClientOptions":         options,
+	}
+	b, err := c.plistCodec.Encode(uninstallCommand)
+	if err != nil {
+		return err
+	}
+	err = c.deviceConn.Send(b)
+	if err != nil {
+		return err
+	}
+	for {
+		response, err := c.plistCodec.Decode(c.deviceConn.Reader())
+		if err != nil {
+			return err
+		}
+		dict, err := ios.ParsePlist(response)
+		if err != nil {
+			return err
+		}
+		done, err := checkFinished(dict)
+		if err != nil {
+			return fmt.Errorf("uninstall %s failed: %+v", bundleId, err)
+		}
+		if done {
+			return nil
+		}
+	}
 }
 
 type BrowseResponse struct {
