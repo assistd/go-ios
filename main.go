@@ -81,6 +81,7 @@ Usage:
   ios winfo --path=<test.wzip> [options]
   ios wextract --path=<test.wzip> --item=<file> [options]
   ios install --path=<ipaOrAppFolder> [options]
+  ios uninstall <bundleID> [options]
   ios apps [--system] [options]
   ios launch <bundleID> [options]
   ios runtest <bundleID> [options]
@@ -124,6 +125,7 @@ The commands work as following:
    >                                                                  The --binary flag will dump everything in raw binary without any decoding. 
    ios readpair                                                       Dump detailed information about the pairrecord for a device.                                              Starts a pcap dump of network traffic
    ios install --path=<ipaOrAppFolder> [options]                      Specify a .app folder or an installable ipa file that will be installed.  
+   ios uninstall <bundleID>                                           Uninstall app with the bundleID on the device. Get your bundle ID from the apps command.
    ios pcap [options] [--pid=<processID>] [--process=<processName>]   Starts a pcap dump of network traffic, use --pid or --process to filter specific processes.
    ios apps [--system]                                                Retrieves a list of installed applications. --system prints out preinstalled system apps.
    ios launch <bundleID>                                              Launch app with the bundleID on the device. Get your bundle ID from the apps command.
@@ -269,6 +271,13 @@ The commands work as following:
 	if b {
 		path, _ := arguments.String("--path")
 		installApp(device, path)
+		return
+	}
+
+	b, _ = arguments.Bool("uninstall")
+	if b {
+		bundleID, _ := arguments.String("<bundleID>")
+		uninstallApp(device, bundleID)
 		return
 	}
 
@@ -508,6 +517,14 @@ func installApp(device ios.DeviceEntry, path string) {
 	exitIfError("failed connecting to zipconduit, dev image installed?", err)
 	err = conn.SendFile(path)
 	exitIfError("failed writing", err)
+}
+
+func uninstallApp(device ios.DeviceEntry, bundleId string) {
+	log.WithFields(log.Fields{"appPath": bundleId, "device": device.Properties.SerialNumber}).Info("uninstalling")
+	svc, err := installationproxy.New(device)
+	exitIfError("failed connecting to installationproxy", err)
+	err = svc.Uninstall(bundleId)
+	exitIfError("failed uninstalling", err)
 }
 
 func language(device ios.DeviceEntry, locale string, language string) {
