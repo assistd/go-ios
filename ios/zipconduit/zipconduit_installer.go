@@ -1,6 +1,7 @@
 package zipconduit
 
 import (
+	"context"
 	"encoding/binary"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
@@ -149,7 +150,7 @@ type InstallEvent struct {
 	Percent int    `json:"percent"`
 }
 
-func (conn Connection) InstallIpaAppWithProcess(ipaApp string, eventWriter func(event InstallEvent)) error {
+func (conn Connection) InstallIpaAppWithProcess(ctx context.Context, ipaApp string, eventWriter func(event InstallEvent)) error {
 	pwd, _ := os.Getwd()
 	tmpDir, err := ioutil.TempDir(pwd, "temp")
 	if err != nil {
@@ -178,7 +179,18 @@ func (conn Connection) InstallIpaAppWithProcess(ipaApp string, eventWriter func(
 	if err != nil {
 		return err
 	}
-	return conn.waitForInstallationWithProcess(eventWriter)
+
+	if ctx != nil {
+		go func() {
+			select {
+			case <-ctx.Done():
+				conn.deviceConn.Close()
+				break
+			}
+		}()
+	}
+	err = conn.waitForInstallationWithProcess(eventWriter)
+	return err
 }
 
 func (conn Connection) waitForInstallationWithProcess(eventWriter func(event InstallEvent)) error {
