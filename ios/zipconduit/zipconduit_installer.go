@@ -1,6 +1,7 @@
 package zipconduit
 
 import (
+	"context"
 	"encoding/binary"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
@@ -140,6 +141,79 @@ func (conn Connection) waitForInstallation() error {
 			log.Info("installation successful")
 			return nil
 		}
+		log.WithFields(log.Fields{"status": status, "percentComplete": percent}).Info("installing")
+	}
+}
+
+type InstallEvent struct {
+	Stage   string `json:"stage"`
+	Percent int    `json:"percent"`
+}
+
+func (conn Connection) InstallIpaAppWithProcess(ctx context.Context, ipaApp string, eventWriter func(event InstallEvent)) error {
+	pwd, _ := os.Getwd()
+	tmpDir, err := ioutil.TempDir(pwd, "temp")
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err := os.RemoveAll(tmpDir)
+		if err != nil {
+			log.WithFields(log.Fields{"dir": tmpDir}).Warn("failed removing tempdir")
+		}
+	}()
+
+	_, _, err = Unzip(ipaApp, tmpDir)
+	if err != nil {
+		return err
+	}
+
+	err = conn.initTransfer(ipaApp)
+	if err != nil {
+		return err
+	}
+
+	deviceStream := conn.deviceConn.Writer()
+	err = packDirToConduitStream(tmpDir, deviceStream)
+	if err != nil {
+		return err
+	}
+
+	if ctx != nil {
+		go func() {
+			select {
+			case <-ctx.Done():
+				conn.deviceConn.Close()
+				break
+			}
+		}()
+	}
+	err = conn.waitForInstallationWithProcess(eventWriter)
+	return err
+}
+
+func (conn Connection) waitForInstallationWithProcess(eventWriter func(event InstallEvent)) error {
+	for {
+		msg, _ := conn.plistCodec.Decode(conn.deviceConn.Reader())
+		plist, _ := ios.ParsePlist(msg)
+		log.Debugf("%+v", plist)
+		done, percent, status, err := evaluateProgress(plist)
+		if err != nil {
+			return err
+		}
+		if done {
+			eventWriter(InstallEvent{
+				Stage: "install successful",
+				Percent: 100,
+			})
+			log.Info("installation successful")
+			return nil
+		}
+		eventWriter(InstallEvent{
+			Stage: status,
+			Percent: percent,
+		})
 		log.WithFields(log.Fields{"status": status, "percentComplete": percent}).Info("installing")
 	}
 }
