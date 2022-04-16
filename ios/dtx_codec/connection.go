@@ -2,8 +2,8 @@ package dtx
 
 import (
 	"io"
-	"sync"
 	"strings"
+	"sync"
 
 	ios "github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
@@ -17,7 +17,7 @@ type MethodWithResponse func(msg Message) (interface{}, error)
 type Connection struct {
 	deviceConnection       ios.DeviceConnectionInterface
 	channelCodeCounter     int
-	activeChannels         map[int]*Channel
+	activeChannels         sync.Map //map[int]*Channel
 	globalChannel          *Channel
 	capabilities           map[string]interface{}
 	mutex                  sync.Mutex
@@ -94,7 +94,7 @@ func NewConnection(device ios.DeviceEntry, serviceName string) (*Connection, err
 	requestChannelMessages := make(chan Message, 5)
 
 	//The global channel has channelCode 0, so we need to start with channelCodeCounter==1
-	dtxConnection := &Connection{deviceConnection: conn, channelCodeCounter: 1, activeChannels: map[int]*Channel{}, requestChannelMessages: requestChannelMessages}
+	dtxConnection := &Connection{deviceConnection: conn, channelCodeCounter: 1, requestChannelMessages: requestChannelMessages}
 
 	//The global channel is automatically present and used for requesting other channels and some other methods like notifyPublishedCapabilities
 	globalChannel := Channel{channelCode: 0,
@@ -118,7 +118,7 @@ func reader(dtxConn *Connection) {
 		msg, err := ReadMessage(reader)
 		if err != nil {
 			errText := err.Error()
-			if err == io.EOF || strings.Contains( errText, "use of closed network" ) {
+			if err == io.EOF || strings.Contains(errText, "use of closed network") {
 				log.Debug("DTX Connection with EOF")
 				return
 			}
@@ -126,7 +126,8 @@ func reader(dtxConn *Connection) {
 			return
 		}
 
-		if channel, ok := dtxConn.activeChannels[msg.ChannelCode]; ok {
+		if _channel, ok := dtxConn.activeChannels.Load(msg.ChannelCode); ok {
+			channel := _channel.(*Channel)
 			channel.Dispatch(msg)
 		} else {
 			dtxConn.globalChannel.Dispatch(msg)
@@ -153,7 +154,7 @@ func (dtxConn *Connection) ForChannelRequest(messageDispatcher Dispatcher) *Chan
 	identifier, _ := nskeyedarchiver.Unarchive(msg.Auxiliary.GetArguments()[1].([]byte))
 	//TODO: Setting the channel code here manually to -1 for making testmanagerd work. For some reason it requests the TestDriver proxy channel with code 1 but sends messages on -1. Should probably be fixed somehow
 	channel := &Channel{channelCode: -1, channelName: identifier[0].(string), messageIdentifier: 1, connection: dtxConn, messageDispatcher: messageDispatcher, responseWaiters: map[int]chan Message{}, defragmenters: map[int]*FragmentDecoder{}}
-	dtxConn.activeChannels[-1] = channel
+	dtxConn.activeChannels.Store(-1, channel)
 	return channel
 }
 
@@ -179,6 +180,6 @@ func (dtxConn *Connection) RequestChannelIdentifier(identifier string, messageDi
 	}
 	log.WithFields(log.Fields{"channel_id": identifier}).Debug("Channel open")
 	channel := &Channel{channelCode: code, channelName: identifier, messageIdentifier: 1, connection: dtxConn, messageDispatcher: messageDispatcher, responseWaiters: map[int]chan Message{}, defragmenters: map[int]*FragmentDecoder{}}
-	dtxConn.activeChannels[code] = channel
+	dtxConn.activeChannels.Store(code, channel)
 	return channel
 }
