@@ -3,8 +3,6 @@ package zipconduit
 import (
 	"context"
 	"encoding/binary"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -12,6 +10,10 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"time"
+
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
 )
 
 /**
@@ -60,7 +62,12 @@ func New(device ios.DeviceEntry) (*Connection, error) {
 //SendFile will send either a zipFile or an unzipped directory to the device.
 //If you specify appFilePath to a file, it will try to Unzip it to a temp dir first and then send.
 //If appFilePath points to a directory, it will try to install the dir contents as an app.
+
 func (conn Connection) SendFile(appFilePath string) error {
+	return conn.SendFileWithProgress(appFilePath, nil, nil)
+}
+
+func (conn Connection) SendFileWithProgress(appFilePath string, ctx context.Context, notify func(event InstallEvent)) error {
 	openedFile, err := os.Open(appFilePath)
 	if err != nil {
 		return err
@@ -72,18 +79,22 @@ func (conn Connection) SendFile(appFilePath string) error {
 		return err
 	}
 	if info.IsDir() {
-		return conn.sendDirectory(appFilePath)
+		return conn.sendDirectoryWithProgress(appFilePath, notify)
 	}
 
 	isCondZip, err := IsConduitZip(appFilePath)
 	if isCondZip {
-		return conn.InstallConduitApp(appFilePath)
+		return conn.InstallConduitAppWithProgress(appFilePath, ctx, notify)
 	}
 
-	return conn.InstallIpaApp(appFilePath)
+	return conn.InstallIpaAppWithProgress(appFilePath, ctx, notify)
 }
 
-func (conn Connection) sendDirectory(dir string) error {
+func (conn Connection) sendDirectory(dir string, notify func(event InstallEvent)) error {
+	return conn.sendDirectoryWithProgress(dir, nil)
+}
+
+func (conn Connection) sendDirectoryWithProgress(dir string, notify func(event InstallEvent)) error {
 	err := conn.initTransfer(dir + ".ipa")
 	if err != nil {
 		return err
@@ -93,10 +104,14 @@ func (conn Connection) sendDirectory(dir string) error {
 	if err != nil {
 		return err
 	}
-	return conn.waitForInstallation()
+	return conn.waitForInstallationWithProgress(notify)
 }
 
 func (conn Connection) InstallIpaApp(ipaApp string) error {
+	return conn.InstallIpaAppWithProgress(ipaApp, nil, nil)
+}
+
+func (conn Connection) InstallIpaAppWithProgress(ipaApp string, ctx context.Context, notify func(event InstallEvent)) error {
 	pwd, _ := os.Getwd()
 	tmpDir, err := ioutil.TempDir(pwd, "temp")
 	if err != nil {
@@ -110,7 +125,8 @@ func (conn Connection) InstallIpaApp(ipaApp string) error {
 		}
 	}()
 
-	_, _, err = Unzip(ipaApp, tmpDir)
+	var overallSize uint64
+	_, overallSize, err = Unzip(ipaApp, tmpDir)
 	if err != nil {
 		return err
 	}
@@ -121,61 +137,27 @@ func (conn Connection) InstallIpaApp(ipaApp string) error {
 	}
 
 	deviceStream := conn.deviceConn.Writer()
-	err = packDirToConduitStream(tmpDir, deviceStream)
-	if err != nil {
-		return err
-	}
-	return conn.waitForInstallation()
-}
+	dst := deviceStream
 
-func (conn Connection) waitForInstallation() error {
-	for {
-		msg, _ := conn.plistCodec.Decode(conn.deviceConn.Reader())
-		plist, _ := ios.ParsePlist(msg)
-		log.Debugf("%+v", plist)
-		done, percent, status, err := evaluateProgress(plist)
-		if err != nil {
-			return err
+	var ctx2 context.Context
+	var cancel context.CancelFunc
+	var listener PushListener
+	if ctx != nil {
+		ctx2, cancel = context.WithCancel(ctx)
+		listener = PushListener{
+			overallSize: overallSize,
 		}
-		if done {
-			log.Info("installation successful")
-			return nil
-		}
-		log.WithFields(log.Fields{"status": status, "percentComplete": percent}).Info("installing")
-	}
-}
-
-type InstallEvent struct {
-	Stage   string `json:"stage"`
-	Percent int    `json:"percent"`
-}
-
-func (conn Connection) InstallIpaAppWithProcess(ctx context.Context, ipaApp string, eventWriter func(event InstallEvent)) error {
-	pwd, _ := os.Getwd()
-	tmpDir, err := ioutil.TempDir(pwd, "temp")
-	if err != nil {
-		return err
 	}
 
-	defer func() {
-		err := os.RemoveAll(tmpDir)
-		if err != nil {
-			log.WithFields(log.Fields{"dir": tmpDir}).Warn("failed removing tempdir")
-		}
-	}()
-
-	_, _, err = Unzip(ipaApp, tmpDir)
-	if err != nil {
-		return err
+	if notify != nil {
+		go listener.Start(ctx2, notify)
+		dst = io.MultiWriter(deviceStream, &listener)
 	}
 
-	err = conn.initTransfer(ipaApp)
-	if err != nil {
-		return err
+	err = packDirToConduitStream(tmpDir, dst)
+	if ctx2 != nil {
+		cancel()
 	}
-
-	deviceStream := conn.deviceConn.Writer()
-	err = packDirToConduitStream(tmpDir, deviceStream)
 	if err != nil {
 		return err
 	}
@@ -189,11 +171,10 @@ func (conn Connection) InstallIpaAppWithProcess(ctx context.Context, ipaApp stri
 			}
 		}()
 	}
-	err = conn.waitForInstallationWithProcess(eventWriter)
-	return err
+	return conn.waitForInstallationWithProgress(notify)
 }
 
-func (conn Connection) waitForInstallationWithProcess(eventWriter func(event InstallEvent)) error {
+func (conn Connection) waitForInstallationWithProgress(notify func(event InstallEvent)) error {
 	for {
 		msg, _ := conn.plistCodec.Decode(conn.deviceConn.Reader())
 		plist, _ := ios.ParsePlist(msg)
@@ -203,17 +184,16 @@ func (conn Connection) waitForInstallationWithProcess(eventWriter func(event Ins
 			return err
 		}
 		if done {
-			eventWriter(InstallEvent{
-				Stage: "install successful",
-				Percent: 100,
-			})
+			if notify != nil {
+				notify(InstallEvent{Stage: "install successful", Percent: 100})
+			}
 			log.Info("installation successful")
 			return nil
+		} else {
+			if notify != nil {
+				notify(InstallEvent{Stage: status, Percent: percent})
+			}
 		}
-		eventWriter(InstallEvent{
-			Stage: status,
-			Percent: percent,
-		})
 		log.WithFields(log.Fields{"status": status, "percentComplete": percent}).Info("installing")
 	}
 }
@@ -312,11 +292,19 @@ func calculateCrc32(reader io.Reader) (uint32, error) {
 }
 
 func (conn Connection) InstallConduitApp(conduitApp string) error {
+	return conn.InstallConduitAppWithProgress(conduitApp, nil, nil)
+}
+
+func (conn Connection) InstallConduitAppWithProgress(conduitApp string, ctx context.Context, notify func(event InstallEvent)) error {
 	reader, err := os.Open(conduitApp)
 	if err != nil {
 		return err
 	}
 	defer reader.Close()
+
+	if notify != nil {
+		notify(InstallEvent{Stage: InstallByConduitZip, Percent: 0})
+	}
 
 	// skip header
 	header := &conduitZipHeader{}
@@ -334,7 +322,7 @@ func (conn Connection) InstallConduitApp(conduitApp string) error {
 	if err != nil {
 		return err
 	}
-	return conn.waitForInstallation()
+	return conn.waitForInstallationWithProgress(notify)
 }
 
 func (conn Connection) initTransfer(ipaApp string) error {
@@ -347,4 +335,64 @@ func (conn Connection) initTransfer(ipaApp string) error {
 		return err
 	}
 	return nil
+}
+
+const (
+	InstallByConduitZip = "InstallByConduitZip"
+	InstallByPushDir    = "InstallByPushDir"
+	InstallByIPAUnzip   = "InstallByIPAUnzip"
+	DefRefrashRate      = time.Millisecond * 200
+)
+
+type InstallEvent struct {
+	Stage   string `json:"stage"`
+	Percent int    `json:"percent"`
+	Current int64  `json:"current"`
+	Total   int64  `json:"total"`
+	Speed   int64  `json:"speed"`
+}
+
+type PushListener struct {
+	currentSize uint64
+	overallSize uint64
+}
+
+func (u *PushListener) Write(b []byte) (n int, err error) {
+	u.currentSize = u.currentSize + uint64(len(b))
+	u.UpdateProgress(u.currentSize, u.overallSize)
+	return len(b), nil
+}
+
+func (u *PushListener) UpdateProgress(currentSize uint64, unzipSize uint64) {
+	u.currentSize = currentSize
+	u.overallSize = unzipSize
+}
+
+func (u *PushListener) Start(ctx context.Context, notify func(event InstallEvent)) {
+	u.currentSize = 0
+
+	refresh := func() {
+		var lastTotalSize uint64 = 0
+		speedSize := u.currentSize - lastTotalSize
+		f := float32(speedSize) * float32((time.Second.Milliseconds())/DefRefrashRate.Milliseconds())
+		lastTotalSize = u.currentSize
+
+		notify(InstallEvent{
+			Stage:   InstallByPushDir,
+			Current: int64(u.currentSize),
+			Total:   int64(u.overallSize),
+			Speed:   int64(f),
+			Percent: int(float32(u.currentSize) / float32(u.overallSize) * 100),
+		})
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			refresh()
+			return
+		case <-time.After(DefRefrashRate):
+			refresh()
+		}
+	}
 }
