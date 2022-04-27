@@ -26,7 +26,7 @@ func newSavePair(udid string, savePairRecordData *[]byte) *SavePair {
 	data := &SavePair{
 		BundleID:            "go.ios.control",
 		ClientVersionString: "go-usbmux-0.0.1",
-		MessageType:         "ReadPairRecord",
+		MessageType:         "SavePairRecord",
 		ProgName:            "go-usbmux",
 		LibUSBMuxVersion:    3,
 		PairRecordID:        udid,
