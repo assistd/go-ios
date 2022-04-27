@@ -125,6 +125,9 @@ func (conn Connection) InstallIpaAppWithProgress(ipaApp string, ctx context.Cont
 		}
 	}()
 
+	ipaFile,_ := os.Stat(ipaApp)
+	ipaFileSize := uint64(ipaFile.Size())
+
 	var overallSize uint64
 	_, overallSize, err = Unzip(ipaApp, tmpDir)
 	if err != nil {
@@ -145,7 +148,8 @@ func (conn Connection) InstallIpaAppWithProgress(ipaApp string, ctx context.Cont
 	if ctx != nil {
 		ctx2, cancel = context.WithCancel(ctx)
 		listener = PushListener{
-			overallSize: overallSize,
+			overallSize:   overallSize,
+			ipaFileSize:   ipaFileSize,
 		}
 	}
 
@@ -341,7 +345,7 @@ const (
 	InstallByConduitZip = "InstallByConduitZip"
 	InstallByPushDir    = "InstallByPushDir"
 	InstallByIPAUnzip   = "InstallByIPAUnzip"
-	DefRefrashRate      = time.Millisecond * 200
+	DefRefrashRate      = time.Second
 )
 
 type InstallEvent struct {
@@ -353,46 +357,45 @@ type InstallEvent struct {
 }
 
 type PushListener struct {
-	currentSize uint64
-	overallSize uint64
+	currentSize   uint64
+	lastTotalSize uint64
+	ipaFileSize   uint64
+	overallSize   uint64
 }
 
 func (u *PushListener) Write(b []byte) (n int, err error) {
 	u.currentSize = u.currentSize + uint64(len(b))
-	u.UpdateProgress(u.currentSize, u.overallSize)
+	u.lastTotalSize =  u.lastTotalSize + uint64(len(b))
 	return len(b), nil
-}
-
-func (u *PushListener) UpdateProgress(currentSize uint64, unzipSize uint64) {
-	u.currentSize = currentSize
-	u.overallSize = unzipSize
 }
 
 func (u *PushListener) Start(ctx context.Context, notify func(event InstallEvent)) {
 	u.currentSize = 0
 
-	refresh := func() {
-		var lastTotalSize uint64 = 0
-		speedSize := u.currentSize - lastTotalSize
-		f := float32(speedSize) * float32((time.Second.Milliseconds())/DefRefrashRate.Milliseconds())
-		lastTotalSize = u.currentSize
+	refresh := func(finish bool) {
+		f := float64(u.currentSize) * float64((time.Second.Milliseconds())/DefRefrashRate.Milliseconds())
+		percent := float64(u.lastTotalSize) / float64(u.overallSize)
+		if finish {
+			percent = 1
+		}
 
 		notify(InstallEvent{
 			Stage:   InstallByPushDir,
-			Current: int64(u.currentSize),
-			Total:   int64(u.overallSize),
+			Current: int64(float64(u.ipaFileSize) * percent),
+			Total:   int64(u.ipaFileSize),
 			Speed:   int64(f),
-			Percent: int(float32(u.currentSize) / float32(u.overallSize) * 100),
+			Percent: int(percent * 100),
 		})
+		u.currentSize = 0
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			refresh()
+			refresh(true)
 			return
 		case <-time.After(DefRefrashRate):
-			refresh()
+			refresh(false)
 		}
 	}
 }
