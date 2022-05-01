@@ -33,24 +33,13 @@ type tmuxd struct {
 }
 
 // newTmuxd init adb kit
-func newTmuxd(addr string, port int) (*tmuxd, error) {
-	/*
-		client, err := adb.NewWithConfig(adb.ServerConfig{
-			Host: adbAddr,
-			Port: adbPort,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return &tmuxd {
-			adb:      client,
-			portBase: adbdPort,
-			port:     adbdPort,
-			muxMap:  make(map[string]*Usbmuxd),
-		}, nil
-	*/
-	return nil, nil
+func newTmuxd(socket string, port int) (*tmuxd, error) {
+	return &tmuxd{
+		socket:   socket,
+		portBase: port,
+		port:     port,
+		muxMap:   make(map[string]*Usbmuxd),
+	}, nil
 }
 
 func (a *tmuxd) nextPort() int {
@@ -82,13 +71,6 @@ func (a *tmuxd) kick(serial string) {
 	}
 }
 
-func (a *tmuxd) kickWithDeviceId(devicdId int) {
-	if d, ok := a.muxMap[serial]; ok {
-		d.Kick()
-		delete(a.muxMap, serial)
-	}
-}
-
 // spawn find a free port to spawn
 func (a *tmuxd) spawn(serial string, deviceId int) {
 	for {
@@ -97,7 +79,7 @@ func (a *tmuxd) spawn(serial string, deviceId int) {
 			port = a.portBase
 		}
 
-		d := NewUsbmuxd(port, serial)
+		d := NewUsbmuxd(port, a.socket, serial)
 		err := d.Run()
 		if err == nil {
 			log.Errorln("run adbd failed: ", err)
@@ -120,7 +102,7 @@ func (a *tmuxd) listen() {
 		func(ctx context.Context, device Device) {
 			go a.spawn(device.Properties.SerialNumber, device.DeviceID)
 		}, func(ctx context.Context, device Device) {
-			a.kickWithDeviceId(device.DeviceID)
+			a.kick(device.Properties.SerialNumber)
 		},
 	))
 }
@@ -162,6 +144,7 @@ func (a *tmuxd) run(ctx context.Context) error {
 				cacheMutex.Unlock()
 				registry.AddDevice(dCtx, Device(attachedMessageToDevice(msg)))
 			case ListenMessageDetached:
+				msg.Properties.SerialNumber = deviceSerial[msg.DeviceID]
 				cacheMutex.Lock()
 				dCtx, _ := cancelMap[msg.DeviceID]
 				registry.RemoveDevice(dCtx.ctx, Device(attachedMessageToDevice(msg)))

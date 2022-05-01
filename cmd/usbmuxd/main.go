@@ -60,13 +60,13 @@ func main() {
 
 	kit, err := newTmuxd(*usbmuxdPath, *port)
 	if err != nil {
-		log.Fatalln("tadbd create failed: ", err)
+		log.Fatalln("tmuxd create failed: ", err)
 	}
 
 	go func() {
 		err := kit.run(ctx)
 		if err != nil {
-			log.Fatalln("tadbd quit")
+			log.Fatalln("tmuxd quit")
 		}
 	}()
 
