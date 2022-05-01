@@ -40,6 +40,7 @@ func (t *Transport) HandleLoop() {
 
 func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 	var devConn *ios.DeviceConnection
+	var muxToDevice *ios.UsbMuxConnection
 
 	for {
 		request, err := muxOnUnixSocket.ReadMessage()
@@ -71,7 +72,24 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			t.handleListen(muxOnUnixSocket)
 			return
 		case MuxMessageTypeConnect:
-			t.handleConnect(context.Background(), muxOnUnixSocket)
+			if devConn == nil {
+				devConn, err = ios.NewDeviceConnection(t.socket)
+				if err != nil {
+					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
+					muxOnUnixSocket.Close()
+					return
+				}
+				muxToDevice = ios.NewUsbMuxConnection(devConn)
+			}
+
+			err = muxToDevice.SendMuxMessage(request)
+			if err != nil {
+				log.Errorf("transport: failed write to device: %v", err)
+				muxOnUnixSocket.Close()
+				devConn.Close()
+				break
+			}
+			t.handleConnect(context.Background(), devConn)
 			return
 		case MuxMessageTypeListDevices:
 			//TODO: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
@@ -88,16 +106,26 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			if devConn == nil {
 				devConn, err = ios.NewDeviceConnection(t.socket)
 				if err != nil {
-					log.Errorf("usbmuxd: connect to %v failed: %v", t.socket, err)
+					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
 					muxOnUnixSocket.Close()
 					return
 				}
+
+				muxToDevice = ios.NewUsbMuxConnection(devConn)
 			}
 
-			muxToDevice := ios.NewUsbMuxConnection(devConn)
+			err = muxToDevice.SendMuxMessage(request)
+			if err != nil {
+				log.Errorf("transport: failed write to device: %v", err)
+				muxOnUnixSocket.Close()
+				devConn.Close()
+				break
+			}
+
 			response, err := muxToDevice.ReadMessage()
 			err = muxOnUnixSocket.SendMuxMessage(response)
 			if err != nil {
+				log.Errorf("transport: failed write to client: %v", err)
 				// 重复close应该没啥问题
 				muxOnUnixSocket.Close()
 				devConn.Close()
@@ -127,14 +155,7 @@ func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 }
 
-func (t *Transport) handleConnect(ctx context.Context, muxOnUnixSocket *ios.UsbMuxConnection) {
-	devConn, err := ios.NewDeviceConnection(t.socket)
-	if err != nil {
-		log.Errorf("usbmuxd: CONNECT to %v failed: %v", t.socket, err)
-		muxOnUnixSocket.Close()
-		return
-	}
-
+func (t *Transport) handleConnect(ctx context.Context, devConn *ios.DeviceConnection) {
 	closed := false
 	ctx2, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -148,7 +169,7 @@ func (t *Transport) handleConnect(ctx context.Context, muxOnUnixSocket *ios.UsbM
 			closed = true
 		}
 
-		log.Errorf("usbmuxd: CONNECT: forward: close clientConn <-- deviceConn")
+		log.Errorf("transport: CONNECT: forward: close clientConn <-- deviceConn")
 		wg.Done()
 	}()
 
