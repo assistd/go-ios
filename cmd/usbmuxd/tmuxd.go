@@ -6,6 +6,7 @@ import (
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
 	"math"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ var (
 	registry = NewRegistry()
 
 	// cache is a map of device serials to fully resolved bindings.
+	cacheMutex   sync.Mutex
 	cancelMap    = map[int]Ctx{}
 	deviceSerial = make(map[int]string)
 )
@@ -106,7 +108,24 @@ func (a *tmuxd) spawn(serial string, deviceId int) {
 	}
 }
 
-func (a *tmuxd) run() error {
+func attachedMessageToDevice(msg ios.AttachedMessage) ios.DeviceEntry {
+	return ios.DeviceEntry{
+		DeviceID:   msg.DeviceID,
+		Properties: msg.Properties,
+	}
+}
+
+func (a *tmuxd) listen() {
+	registry.Listen(NewDeviceListener(
+		func(ctx context.Context, device Device) {
+			go a.spawn(device.Properties.SerialNumber, device.DeviceID)
+		}, func(ctx context.Context, device Device) {
+			a.kickWithDeviceId(device.DeviceID)
+		},
+	))
+}
+
+func (a *tmuxd) run(ctx context.Context) error {
 	for {
 		deviceConn, err := ios.NewDeviceConnection(a.socket)
 		if err != nil {
@@ -123,19 +142,33 @@ func (a *tmuxd) run() error {
 		}
 
 		for {
-			message, err := attachedReceiver()
+			msg, err := attachedReceiver()
 			if err != nil {
-				log.Errorln("Failed decoding MuxMessage", message, err)
+				log.Errorln("Failed decoding MuxMessage", msg, err)
 				deviceConn.Close()
 				break
 			}
 
-			switch message.MessageType {
+			switch msg.MessageType {
 			case ListenMessageAttached:
-				go a.spawn(message.Properties.SerialNumber, message.DeviceID)
+				deviceSerial[msg.DeviceID] = msg.Properties.SerialNumber
+				dCtx, cancel := context.WithCancel(ctx)
+
+				cacheMutex.Lock()
+				cancelMap[msg.DeviceID] = Ctx{
+					cancel: cancel,
+					ctx:    dCtx,
+				}
+				cacheMutex.Unlock()
+				registry.AddDevice(dCtx, Device(attachedMessageToDevice(msg)))
 			case ListenMessageDetached:
-				a.kickWithDeviceId(message.DeviceID)
+				cacheMutex.Lock()
+				dCtx, _ := cancelMap[msg.DeviceID]
+				registry.RemoveDevice(dCtx.ctx, Device(attachedMessageToDevice(msg)))
+				dCtx.cancel()
+				cacheMutex.Unlock()
 			case ListenMessagePaired:
+				// TODO:
 			default:
 				log.Fatalf("unknown listen message type: ")
 			}

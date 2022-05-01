@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -54,13 +55,16 @@ func main() {
 	flag.Parse()
 	initLog()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	kit, err := newTmuxd(*usbmuxdPath, *port)
 	if err != nil {
 		log.Fatalln("tadbd create failed: ", err)
 	}
 
 	go func() {
-		err := kit.run()
+		err := kit.run(ctx)
 		if err != nil {
 			log.Fatalln("tadbd quit")
 		}
