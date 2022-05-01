@@ -12,12 +12,10 @@ import (
 )
 
 type Transport struct {
-	Serial      string
-	socket      string
-	clientConn  net.Conn
-	selfLocalId uint32
-	connMap     map[uint32]io.ReadWriteCloser
-	mutex       sync.Mutex
+	Serial     string
+	socket     string
+	clientConn net.Conn
+	mutex      sync.Mutex
 }
 
 // NewTransport init transport
@@ -26,7 +24,6 @@ func NewTransport(socket string, clientConn net.Conn, serial string) *Transport 
 		Serial:     serial,
 		socket:     socket,
 		clientConn: clientConn,
-		connMap:    make(map[uint32]io.ReadWriteCloser),
 	}
 }
 
@@ -42,12 +39,17 @@ func (t *Transport) HandleLoop() {
 }
 
 func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
+	var devConn *ios.DeviceConnection
+
 	for {
 		request, err := muxOnUnixSocket.ReadMessage()
 		if err != nil {
 			inConn := muxOnUnixSocket.ReleaseDeviceConnection()
 			if inConn != nil {
 				inConn.Close()
+			}
+			if devConn != nil {
+				devConn.Close()
 			}
 			log.Errorln("transport: failed reading UsbMuxMessage", err)
 			return
@@ -81,17 +83,20 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 		case MuxMessageTypeSavePairRecord:
 			fallthrough
 		case MuxMessageTypeDeletePairRecord:
-			devConn, err := ios.NewDeviceConnection(t.socket)
-			if err != nil {
-				log.Errorf("usbmuxd: connect to %v failed: %v", t.socket, err)
-				muxOnUnixSocket.Close()
-				return
+			if devConn == nil {
+				devConn, err = ios.NewDeviceConnection(t.socket)
+				if err != nil {
+					log.Errorf("usbmuxd: connect to %v failed: %v", t.socket, err)
+					muxOnUnixSocket.Close()
+					return
+				}
 			}
 
 			muxToDevice := ios.NewUsbMuxConnection(devConn)
 			response, err := muxToDevice.ReadMessage()
 			err = muxOnUnixSocket.SendMuxMessage(response)
 			if err != nil {
+				// 重复close应该没啥问题
 				muxOnUnixSocket.Close()
 				devConn.Close()
 			}
