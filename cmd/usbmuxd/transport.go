@@ -13,7 +13,7 @@ import (
 
 type Transport struct {
 	Serial      string
-	devConn     *ios.DeviceConnection
+	socket      string
 	clientConn  net.Conn
 	selfLocalId uint32
 	connMap     map[uint32]io.ReadWriteCloser
@@ -21,10 +21,10 @@ type Transport struct {
 }
 
 // NewTransport init transport
-func NewTransport(devConn *ios.DeviceConnection, clientConn net.Conn, serial string) *Transport {
+func NewTransport(socket string, clientConn net.Conn, serial string) *Transport {
 	return &Transport{
 		Serial:     serial,
-		devConn:    devConn,
+		socket:     socket,
 		clientConn: clientConn,
 		connMap:    make(map[uint32]io.ReadWriteCloser),
 	}
@@ -37,19 +37,17 @@ func (t *Transport) Kick() {
 // HandleLoop run adb packet reading and writing loop
 func (t *Transport) HandleLoop() {
 	clientMuxConn := ios.NewUsbMuxConnection(ios.NewDeviceConnectionWithConn(t.clientConn))
-	devMuxConn := ios.NewUsbMuxConnection(t.devConn)
-	go t.proxyMuxConnection(clientMuxConn, devMuxConn)
+	go t.proxyMuxConnection(clientMuxConn)
 	//ctx, cancel := context.WithCancel(context.Background())
 }
 
-func (t *Transport) proxyMuxConnection(muxOnUnixSocket, muxToDevice *ios.UsbMuxConnection) {
+func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 	for {
 		request, err := muxOnUnixSocket.ReadMessage()
 		if err != nil {
-			muxOnUnixSocket.ReleaseDeviceConnection().Close()
-			if err == io.EOF {
-				log.Errorf("transport: EOF")
-				return
+			inConn := muxOnUnixSocket.ReleaseDeviceConnection()
+			if inConn != nil {
+				inConn.Close()
 			}
 			log.Errorln("transport: failed reading UsbMuxMessage", err)
 			return
@@ -59,7 +57,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket, muxToDevice *ios.UsbMuxC
 		decoder := plist.NewDecoder(bytes.NewReader(request.Payload))
 		err = decoder.Decode(&decodedRequest)
 		if err != nil {
-			log.Errorln("Failed decoding MuxMessage", request, err)
+			log.Fatalln("transport: failed decoding MuxMessage", request, err)
 			return
 		}
 
@@ -69,16 +67,100 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket, muxToDevice *ios.UsbMuxC
 			t.handleListen(muxOnUnixSocket)
 			return
 		case MuxMessageTypeConnect:
+			t.handleConnect(context.Background(), muxOnUnixSocket)
+			return
 		case MuxMessageTypeListDevices:
+			//TODO: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
+			t.handleListDevices(muxOnUnixSocket)
 		case MuxMessageTypeListListeners:
+			log.Fatalf("not supported yet")
 		case MuxMessageTypeReadBUID:
+			fallthrough
 		case MuxMessageTypeReadPairRecord:
+			fallthrough
 		case MuxMessageTypeSavePairRecord:
+			fallthrough
 		case MuxMessageTypeDeletePairRecord:
+			devConn, err := ios.NewDeviceConnection(t.socket)
+			if err != nil {
+				log.Errorf("usbmuxd: connect to %v failed: %v", t.socket, err)
+				muxOnUnixSocket.Close()
+				return
+			}
+
+			muxToDevice := ios.NewUsbMuxConnection(devConn)
+			response, err := muxToDevice.ReadMessage()
+			err = muxOnUnixSocket.SendMuxMessage(response)
+			if err != nil {
+				muxOnUnixSocket.Close()
+				devConn.Close()
+			}
 		default:
 			log.Fatalf("Unexpected command %s received!", messageType)
 		}
 	}
+}
+
+func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
+	for _, d := range registry.Devices() {
+		if d.Properties.SerialNumber != t.Serial {
+			return
+		}
+
+		d.MessageType = ListenMessageAttached
+		err := muxOnUnixSocket.Send(d)
+		if err != nil {
+			log.Errorln("transport: LISTEN: write failed:", err)
+		}
+	}
+}
+
+func (t *Transport) handleConnect(ctx context.Context, muxOnUnixSocket *ios.UsbMuxConnection) {
+	devConn, err := ios.NewDeviceConnection(t.socket)
+	if err != nil {
+		log.Errorf("usbmuxd: CONNECT to %v failed: %v", t.socket, err)
+		muxOnUnixSocket.Close()
+		return
+	}
+
+	closed := false
+	ctx2, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		io.Copy(devConn.Writer(), t.clientConn)
+		if ctx2.Err() == nil {
+			cancel()
+			devConn.Close()
+			t.clientConn.Close()
+			closed = true
+		}
+
+		log.Errorf("usbmuxd: CONNECT: forward: close clientConn <-- deviceConn")
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		io.Copy(t.clientConn, devConn.Reader())
+		if ctx2.Err() == nil {
+			cancel()
+			devConn.Close()
+			t.clientConn.Close()
+			closed = true
+		}
+
+		log.Errorf("forward: close clientConn --> deviceConn")
+		wg.Done()
+	}()
+
+	<-ctx2.Done()
+	if !closed {
+		devConn.Close()
+		t.clientConn.Close()
+	}
+
+	wg.Wait()
 }
 
 func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {

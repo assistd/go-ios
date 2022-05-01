@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"sync"
@@ -57,18 +56,7 @@ func (a *Usbmuxd) Run() error {
 			return fmt.Errorf("usbmuxd: fail to listen accept: %v", err)
 		}
 
-		devConn, err := ios.NewDeviceConnection(a.socket)
-		if err != nil {
-			// should never be here
-			devConn.Close()
-			// close other transport
-			a.Kick()
-			listener.Close()
-			log.Errorf("usbmuxd: connect to %v failed: %v", a.socket, err)
-			return fmt.Errorf("usbmuxd: connect to %v failed: %v", a.socket, err)
-		}
-
-		t := NewTransport(devConn, conn, a.serial)
+		t := NewTransport(a.socket, conn, a.serial)
 		a.mutex.Lock()
 		a.transports[t] = struct{}{}
 		a.mutex.Unlock()
