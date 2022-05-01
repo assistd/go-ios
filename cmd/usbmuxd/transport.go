@@ -63,6 +63,8 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			return
 		}
 
+		log.Infof("transport: read UsbMuxMessage:%v", decodedRequest)
+
 		messageType := decodedRequest["MessageType"]
 		switch messageType {
 		case MuxMessageTypeListen:
@@ -108,14 +110,19 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 
 func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
 	for _, d := range registry.Devices() {
-		if d.Properties.SerialNumber != t.Serial {
+		log.Infof("transport: ListDevices:%#v, serial:%v", d, t.Serial)
+		if d.Properties.SerialNumber == t.Serial {
+			deviceList := ios.DeviceList{
+				DeviceList: []ios.DeviceEntry{
+					ios.DeviceEntry(d),
+				},
+			}
+			d.MessageType = ListenMessageAttached
+			err := muxOnUnixSocket.Send(deviceList)
+			if err != nil {
+				log.Errorln("transport: LISTEN: write failed:", err)
+			}
 			return
-		}
-
-		d.MessageType = ListenMessageAttached
-		err := muxOnUnixSocket.Send(d)
-		if err != nil {
-			log.Errorln("transport: LISTEN: write failed:", err)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"path"
@@ -55,6 +56,8 @@ func main() {
 	flag.Parse()
 	initLog()
 
+	ios.SetUsbmuxdSocket("unix", "/var/run/usbmux_real")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -64,6 +67,7 @@ func main() {
 	}
 
 	go func() {
+		kit.listen()
 		err := kit.run(ctx)
 		if err != nil {
 			log.Fatalln("tmuxd quit")

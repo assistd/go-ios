@@ -18,9 +18,10 @@ type Usbmuxd struct {
 // NewUsbmuxd create an Usbmuxd instance
 func NewUsbmuxd(port int, socket string, serial string) *Usbmuxd {
 	return &Usbmuxd{
-		socket: socket,
-		port:   port,
-		serial: serial,
+		socket:     socket,
+		port:       port,
+		serial:     serial,
+		transports: make(map[*Transport]struct{}),
 	}
 }
 

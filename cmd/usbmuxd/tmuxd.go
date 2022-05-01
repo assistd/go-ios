@@ -80,9 +80,11 @@ func (a *tmuxd) spawn(serial string, deviceId int) {
 		}
 
 		d := NewUsbmuxd(port, a.socket, serial)
+		a.muxMap[serial] = d
+
 		err := d.Run()
 		if err == nil {
-			log.Errorln("run adbd failed: ", err)
+			log.Errorln("tmuxd: run failed: ", err)
 			return
 		}
 
@@ -118,7 +120,7 @@ func (a *tmuxd) run(ctx context.Context) error {
 		muxConnection := ios.NewUsbMuxConnection(deviceConn)
 		attachedReceiver, err := muxConnection.Listen()
 		if err != nil {
-			log.Errorln("failed issuing Listen command:", err)
+			log.Errorln("tmuxd: failed issuing Listen command:", err)
 			deviceConn.Close()
 			continue
 		}
@@ -126,10 +128,12 @@ func (a *tmuxd) run(ctx context.Context) error {
 		for {
 			msg, err := attachedReceiver()
 			if err != nil {
-				log.Errorln("Failed decoding MuxMessage", msg, err)
+				log.Errorln("tmuxd: failed decoding MuxMessage", msg, err)
 				deviceConn.Close()
 				break
 			}
+
+			log.Infoln("tmuxd: ios monitor: ", msg)
 
 			switch msg.MessageType {
 			case ListenMessageAttached:
@@ -153,7 +157,7 @@ func (a *tmuxd) run(ctx context.Context) error {
 			case ListenMessagePaired:
 				// TODO:
 			default:
-				log.Fatalf("unknown listen message type: ")
+				log.Fatalln("tmuxd: unknown listen message type: ", msg.MessageType)
 			}
 		}
 	}
