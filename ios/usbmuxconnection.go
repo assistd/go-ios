@@ -13,6 +13,14 @@ import (
 const DefaultUsbmuxdSocket = "/var/run/usbmuxd"
 const DefaultUsbmuxdSocketForWin = "127.0.0.1:27015" //虫洞 37015
 
+var usbmuxdSocketNetwork string
+var usbmuxdSocketAddr string
+
+func SetUsbmuxdSocket(network, socket string) {
+	usbmuxdSocketNetwork = network
+	usbmuxdSocketAddr = socket
+}
+
 //UsbMuxConnection can send and read messages to the usbmuxd process to manage pairrecors, listen for device changes
 //and connect to services on the phone. Usually messages follow a  request-response pattern. there is a tag integer
 //in the message header, that is increased with every sent message.

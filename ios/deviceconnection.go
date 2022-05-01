@@ -46,7 +46,10 @@ func NewDeviceConnectionWithConn(conn net.Conn) *DeviceConnection {
 //ConnectToSocketAddress connects to the USB multiplexer with a specified socket addres
 func (conn *DeviceConnection) connectToSocketAddress(socketAddress string) error {
 	var network, address string
-	if socketAddress == DefaultUsbmuxdSocket {
+	if usbmuxdSocketNetwork != "" {
+		network = usbmuxdSocketNetwork
+		address = usbmuxdSocketAddr
+	} else if socketAddress == DefaultUsbmuxdSocket {
 		switch runtime.GOOS {
 		case "darwin", "android", "linux":
 			network, address = "unix", DefaultUsbmuxdSocket
