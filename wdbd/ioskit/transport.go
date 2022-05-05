@@ -1,9 +1,10 @@
-package main
+package ioskit
 
 import (
 	"bytes"
 	"context"
 	"github.com/danielpaulus/go-ios/ios"
+	"github.com/danielpaulus/go-ios/wdbd"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 	"io"
@@ -204,7 +205,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		}
 	}
 
-	onAdd := func(ctx context.Context, d Device) {
+	onAdd := func(ctx context.Context, d wdbd.DeviceEntry) {
 		if d.Properties.SerialNumber != t.Serial {
 			return
 		}
@@ -217,7 +218,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		}
 	}
 
-	onRemove := func(ctx context.Context, d Device) {
+	onRemove := func(ctx context.Context, d wdbd.DeviceEntry) {
 		d.MessageType = ListenMessageDetached
 		err := muxOnUnixSocket.Send(d)
 		if err != nil {
@@ -231,7 +232,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		onAdd(nil, d)
 	}
 
-	unListen := registry.Listen(NewDeviceListener(onAdd, onRemove))
+	unListen := registry.Listen(wdbd.NewDeviceListener(onAdd, onRemove))
 	defer unListen()
 	defer cleanup()
 

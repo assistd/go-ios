@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package wdbd;
+option go_package = "/wdbd";
+
+enum DeviceType {
+  Android = 0; // Android设备
+  IOS = 1; // iOS设备
+}
+
+enum DeviceConnType {
+  Usb = 0; // usb连接
+  Wifi = 1; // wifi连接
+}
+
+enum DeviceEventType {
+  Add = 0; // 添加设备
+  Remove = 1; // 移除设备
+}
+
+message Device {
+  DeviceType dev_type = 1; // 设备系统类型
+  DeviceConnType conn_type = 2; // 设备连接类型
+  string uid = 3; // 设备uid
+  string name = 4; //设备名字
+}
+
+message DeviceEvent {
+  DeviceEventType event_type = 1; // 事件类型
+  Device device = 2; // 设备标识
+}
+
+message MonitorRequest {
+  bool android = 1;
+  bool iOS = 2;
+}
+
+message ListDevicesRequest {
+}
+
+message DeviceList {
+  repeated Device list = 1;
+}
+
+message ForwardDeviceRequest {
+  Device device = 1;
+}
+
+message Message {
+  oneof message {
+    MonitorRequest monitor = 1;
+    ListDevicesRequest list = 2;
+    ForwardDeviceRequest forward = 3;
+  }
+}
+
+message Response {
+  oneof message {
+    DeviceEvent event = 1;
+    DeviceList device_list = 2;
+  }
+}
+
+message DeviceData {
+  Device device = 1;
+  bytes payload = 2;
+}
+
+service Wdbd {
+  // 启动设备监听器
+  rpc StartDeviceMonitor(MonitorRequest) returns (stream DeviceEvent) {
+  }
+
+  rpc ListDevices(ListDevicesRequest) returns (DeviceList) {
+  }
+
+  rpc ForwardDevice(stream DeviceData) returns (stream DeviceData) {
+  }
+}

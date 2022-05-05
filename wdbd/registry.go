@@ -1,4 +1,4 @@
-package main
+package wdbd
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 	"sync"
 )
 
-type Device ios.DeviceEntry
+type DeviceEntry ios.DeviceEntry
 
-var emptyDevice Device
+var emptyDevice DeviceEntry
 
 type (
 	propertyKey struct {
-		d Device
+		d DeviceEntry
 		k interface{}
 	}
 )
@@ -23,7 +23,7 @@ type (
 // listening for devices that are added to and removed from the device.
 type Registry struct {
 	sync.Mutex
-	devices    []Device
+	devices    []DeviceEntry
 	properties map[propertyKey]interface{}
 	listeners  map[DeviceListener]struct{}
 }
@@ -39,30 +39,30 @@ func NewRegistry() *Registry {
 // DeviceListener is the interface implemented by types that respond to devices
 // being added to and removed from the registry.
 type DeviceListener interface {
-	OnDeviceAdded(context.Context, Device)
-	OnDeviceRemoved(context.Context, Device)
+	OnDeviceAdded(context.Context, DeviceEntry)
+	OnDeviceRemoved(context.Context, DeviceEntry)
 }
 
 // NewDeviceListener returns a DeviceListener that delegates calls on to
 // onDeviceAdded and onDeviceRemoved.
-func NewDeviceListener(onDeviceAdded, onDeviceRemoved func(context.Context, Device)) DeviceListener {
+func NewDeviceListener(onDeviceAdded, onDeviceRemoved func(context.Context, DeviceEntry)) DeviceListener {
 	return &funcDeviceListener{onDeviceAdded, onDeviceRemoved}
 }
 
 // funcDeviceListener is an implementatation of DeviceListener that delegates
 // calls on to the field functions.
 type funcDeviceListener struct {
-	onAdded   func(context.Context, Device)
-	onRemoved func(context.Context, Device)
+	onAdded   func(context.Context, DeviceEntry)
+	onRemoved func(context.Context, DeviceEntry)
 }
 
-func (l funcDeviceListener) OnDeviceAdded(ctx context.Context, d Device) {
+func (l funcDeviceListener) OnDeviceAdded(ctx context.Context, d DeviceEntry) {
 	if f := l.onAdded; f != nil {
 		f(ctx, d)
 	}
 }
 
-func (l funcDeviceListener) OnDeviceRemoved(ctx context.Context, d Device) {
+func (l funcDeviceListener) OnDeviceRemoved(ctx context.Context, d DeviceEntry) {
 	if f := l.onRemoved; f != nil {
 		f(ctx, d)
 	}
@@ -84,7 +84,7 @@ func (r *Registry) Listen(l DeviceListener) (unregister func()) {
 // Device looks up the device with the specified identifier.
 // If no device with the specified identifier was registered with the Registry
 // then nil is returner.
-func (r *Registry) Device(id int) (Device, error) {
+func (r *Registry) Device(id int) (DeviceEntry, error) {
 	r.Lock()
 	defer r.Unlock()
 	for _, d := range r.devices {
@@ -98,7 +98,7 @@ func (r *Registry) Device(id int) (Device, error) {
 // DeviceBySerial looks up the device with serial or udid
 // if no device with specified serial with the Registry
 // then nil is returner.
-func (r *Registry) DeviceBySerial(serial string) (Device, error) {
+func (r *Registry) DeviceBySerial(serial string) (DeviceEntry, error) {
 	r.Lock()
 	defer r.Unlock()
 	for _, d := range r.devices {
@@ -110,17 +110,17 @@ func (r *Registry) DeviceBySerial(serial string) (Device, error) {
 }
 
 // Devices returns the list of devices registered with the Registry.
-func (r *Registry) Devices() []Device {
+func (r *Registry) Devices() []DeviceEntry {
 	r.Lock()
 	defer r.Unlock()
 
-	out := make([]Device, len(r.devices))
+	out := make([]DeviceEntry, len(r.devices))
 	copy(out, r.devices)
 	return out
 }
 
 // DefaultDevice returns the first device registered with the Registry.
-func (r *Registry) DefaultDevice() (Device, error) {
+func (r *Registry) DefaultDevice() (DeviceEntry, error) {
 	r.Lock()
 	defer r.Unlock()
 	if len(r.devices) == 0 {
@@ -130,7 +130,7 @@ func (r *Registry) DefaultDevice() (Device, error) {
 }
 
 // AddDevice registers the device dev with the Registry.
-func (r *Registry) AddDevice(ctx context.Context, d Device) {
+func (r *Registry) AddDevice(ctx context.Context, d DeviceEntry) {
 	r.Lock()
 	defer r.Unlock()
 	for _, t := range r.devices {
@@ -147,7 +147,7 @@ func (r *Registry) AddDevice(ctx context.Context, d Device) {
 }
 
 // RemoveDevice unregisters the device d with the Registry.
-func (r *Registry) RemoveDevice(ctx context.Context, d Device) {
+func (r *Registry) RemoveDevice(ctx context.Context, d DeviceEntry) {
 	r.Lock()
 	defer r.Unlock()
 	for i, t := range r.devices {
@@ -165,7 +165,7 @@ func (r *Registry) RemoveDevice(ctx context.Context, d Device) {
 // DeviceProperty returns the property with the key k for the device d,
 // previously set with SetDeviceProperty. If the property for the device does
 // not exist then nil is returned.
-func (r *Registry) DeviceProperty(ctx context.Context, d Device, k interface{}) interface{} {
+func (r *Registry) DeviceProperty(ctx context.Context, d DeviceEntry, k interface{}) interface{} {
 	r.Lock()
 	defer r.Unlock()
 	return r.properties[propertyKey{d, k}]
@@ -175,7 +175,7 @@ func (r *Registry) DeviceProperty(ctx context.Context, d Device, k interface{}) 
 // device d. This property can be retrieved with DeviceProperty.
 // Properties will persist in the registry even when the device has not been
 // added or has been removed.
-func (r *Registry) SetDeviceProperty(ctx context.Context, d Device, k, v interface{}) {
+func (r *Registry) SetDeviceProperty(ctx context.Context, d DeviceEntry, k, v interface{}) {
 	r.Lock()
 	defer r.Unlock()
 	r.properties[propertyKey{d, k}] = v
