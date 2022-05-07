@@ -31,8 +31,7 @@ message DeviceEvent {
 }
 
 message MonitorRequest {
-  bool android = 1;
-  bool iOS = 2;
+  repeated Device device = 1;
 }
 
 message ListDevicesRequest {

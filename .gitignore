@@ -8,7 +8,6 @@ devimages
 *.so
 *.dylib
 go-ios
-usbmuxd
 main
 *.png
 
@@ -23,3 +22,4 @@ main
 .circleci/
 __debug_bin
 dump-*
+*.pb.go
