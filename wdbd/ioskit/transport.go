@@ -33,7 +33,7 @@ func (t *Transport) Kick() {
 // HandleLoop run adb packet reading and writing loop
 func (t *Transport) HandleLoop() {
 	clientMuxConn := ios.NewUsbMuxConnection(ios.NewDeviceConnectionWithConn(t.clientConn))
-	go t.proxyMuxConnection(clientMuxConn)
+	t.proxyMuxConnection(clientMuxConn)
 	//ctx, cancel := context.WithCancel(context.Background())
 }
 

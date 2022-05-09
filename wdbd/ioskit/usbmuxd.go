@@ -5,6 +5,8 @@ import (
 	"github.com/danielpaulus/go-ios/wdbd"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"os"
+	"strings"
 	"sync"
 )
 
@@ -33,6 +35,10 @@ func NewUsbmuxd(socket string) *Usbmuxd {
 		muxMap:            make(map[string]*RemoteDevice),
 		serialMap:         make(map[string]*RemoteDevice),
 	}
+}
+
+func SetGlobal(usbmuxd *Usbmuxd) {
+	globalUsbmuxd = usbmuxd
 }
 
 // ListenAddr return inner serving port
@@ -89,11 +95,27 @@ func (a *Usbmuxd) GetRemoteDeviceById(deviceId int) (*RemoteDevice, error) {
 
 // Run serve a tcp server, and do the message switching between remote usbmuxd and local one
 func (a *Usbmuxd) Run() error {
-	//listener, err := net.Listen("tcp", fmt.Sprintf(":%v", a.port))
-	listener, err := net.Listen("tcp", a.socket)
+	pos := strings.Index(a.socket, ":")
+	if pos < 0 {
+		return fmt.Errorf("invalid socket: %v", a.socket)
+	}
+
+	network, addr := a.socket[0:pos], a.socket[pos+1:]
+	listener, err := net.Listen(network, addr)
 	if err != nil {
 		return fmt.Errorf("usbmuxd: fail to listen on: %v, error:%v", a.socket, err)
 	}
+
+	if network == "unix" {
+		os.Chmod(addr, 0777)
+	}
+	cleanup := func() {
+		if network == "unix" {
+			os.Remove(addr)
+		}
+	}
+
+	defer cleanup()
 
 	log.Debugln("listen on: ", a.socket)
 	for {
@@ -109,6 +131,14 @@ func (a *Usbmuxd) Run() error {
 
 		log.Debugln("usbmuxd: new transport: ", t)
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Recovered a panic: %v", r)
+					cleanup()
+					return
+				}
+			}()
+
 			t.HandleLoop()
 
 			a.mutex.Lock()

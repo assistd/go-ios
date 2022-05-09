@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/danielpaulus/go-ios/wdbd"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"strings"
 )
 
 type Wdbd struct {
@@ -16,14 +18,22 @@ type Wdbd struct {
 	wdbd.UnimplementedWdbdServer
 }
 
-func NewWdbd() *Wdbd {
-	return &Wdbd{
-		registry: wdbd.NewRegistry(),
+func NewWdbd(socket string) (*Wdbd, error) {
+	pos := strings.Index(socket, ":")
+	if pos < 0 {
+		return nil, fmt.Errorf("invalid socket: %v", socket)
 	}
+
+	network, addr := socket[0:pos], socket[pos+1:]
+	return &Wdbd{
+		network:  network,
+		addr:     addr,
+		registry: wdbd.NewRegistry(),
+	}, nil
 }
 
 func (s *Wdbd) Monitor(ctx context.Context) {
-	kit, err := ioskit.NewDeviceMonitor(*usbmuxdPath)
+	kit, err := ioskit.NewDeviceMonitor(s.network, s.addr)
 	if err != nil {
 		log.Fatalln("tmuxd create failed: ", err)
 	}

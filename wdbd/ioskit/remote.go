@@ -14,10 +14,25 @@ import (
 )
 
 type RemoteDevice struct {
-	Type   int
+	Type   wdbd.DeviceType
 	Addr   string
 	Serial string
 	conn   *grpc.ClientConn
+}
+
+func NewRemoteDevice(typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, error) {
+	r := &RemoteDevice{
+		Type:   typ,
+		Addr:   addr,
+		Serial: serial,
+	}
+
+	err := r.initConn()
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 func (r *RemoteDevice) initConn() error {

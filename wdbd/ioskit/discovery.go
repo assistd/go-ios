@@ -27,10 +27,10 @@ type IOSDeviceMonitor struct {
 }
 
 // NewDeviceMonitor init adb kit
-func NewDeviceMonitor(socket string) (*IOSDeviceMonitor, error) {
+func NewDeviceMonitor(network, addr string) (*IOSDeviceMonitor, error) {
 	return &IOSDeviceMonitor{
-		Network: "unix",
-		Addr:    socket,
+		Network: network,
+		Addr:    addr,
 	}, nil
 }
 
