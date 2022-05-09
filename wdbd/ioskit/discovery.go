@@ -70,7 +70,7 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *wdbd.Registry, interv
 				break
 			}
 
-			log.Infoln("ios-monitor: ios monitor: ", msg)
+			log.Infoln("ios-monitor: msg: ", msg)
 
 			switch msg.MessageType {
 			case ListenMessageAttached:

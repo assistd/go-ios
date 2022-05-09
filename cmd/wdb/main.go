@@ -12,6 +12,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"time"
 )
 
 var mode = flag.String("mode", "wdbd", "wdbd server port")
@@ -56,12 +57,17 @@ func main() {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	case "wdb":
-		remoteDevice, err := ioskit.NewRemoteDevice(wdbd.DeviceType_IOS,
+		ctx2, cancel2 := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel2()
+		remoteDevice, err := ioskit.NewRemoteDevice(
+			ctx2,
+			wdbd.DeviceType_IOS,
 			"192.168.0.47:8083",
 			"82d8ccbcd9160681f7fd9d377d8e0dff7c6591a5")
 		if err != nil {
 			log.Fatalf("failed to create remote device: %v", err)
 		}
+		log.Infof("connected to remote device: %+v", remoteDevice)
 
 		go func() {
 			log.Panicln(remoteDevice.Monitor(ctx))

@@ -20,14 +20,14 @@ type RemoteDevice struct {
 	conn   *grpc.ClientConn
 }
 
-func NewRemoteDevice(typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, error) {
+func NewRemoteDevice(ctx context.Context, typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, error) {
 	r := &RemoteDevice{
 		Type:   typ,
 		Addr:   addr,
 		Serial: serial,
 	}
 
-	err := r.initConn()
+	err := r.initConn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -35,14 +35,12 @@ func NewRemoteDevice(typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, e
 	return r, nil
 }
 
-func (r *RemoteDevice) initConn() error {
+func (r *RemoteDevice) initConn(ctx context.Context) error {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(r.Addr,
+	conn, err := grpc.DialContext(ctx, r.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock())
-	if err != nil {
-		log.Errorf("did not connect: %v", err)
-	} else {
+	if err == nil {
 		r.conn = conn
 	}
 	return err
@@ -67,6 +65,8 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		log.Infoln("recv: ", event)
 
 		switch event.EventType {
 		case wdbd.DeviceEventType_Add:

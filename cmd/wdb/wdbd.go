@@ -35,16 +35,18 @@ func NewWdbd(socket string) (*Wdbd, error) {
 func (s *Wdbd) Monitor(ctx context.Context) {
 	kit, err := ioskit.NewDeviceMonitor(s.network, s.addr)
 	if err != nil {
-		log.Fatalln("tmuxd create failed: ", err)
+		log.Fatalln("wdbd create failed: ", err)
 	}
 
 	err = kit.Monitor(ctx, s.registry, -1)
 	if err != nil {
-		log.Fatalln("tmuxd quit")
+		log.Fatalln("wdbd quit")
 	}
 }
 
 func (s *Wdbd) StartDeviceMonitor(req *wdbd.MonitorRequest, stream wdbd.Wdbd_StartDeviceMonitorServer) error {
+	log.Infof("wdbd: StartDeviceMonitor enter:%v", req.Device)
+
 	devices := req.GetDevice()
 	noFilter := false
 	if devices == nil {
@@ -60,34 +62,41 @@ func (s *Wdbd) StartDeviceMonitor(req *wdbd.MonitorRequest, stream wdbd.Wdbd_Sta
 		return false
 	}
 
-	s.registry.Listen(wdbd.NewDeviceListener(
-		func(ctx context.Context, device wdbd.DeviceEntry) {
-			msg := &wdbd.DeviceEvent{
-				EventType: wdbd.DeviceEventType_Add,
-				Device: &wdbd.Device{
-					DevType:  wdbd.DeviceType_IOS,
-					ConnType: wdbd.DeviceConnType_Usb,
-					Uid:      device.Properties.SerialNumber,
-				},
-			}
+	onAdd := func(ctx context.Context, device wdbd.DeviceEntry) {
+		msg := &wdbd.DeviceEvent{
+			EventType: wdbd.DeviceEventType_Add,
+			Device: &wdbd.Device{
+				DevType: wdbd.DeviceType_IOS,
+				Uid:     device.Properties.SerialNumber,
+			},
+		}
 
-			if noFilter || filter(device.Properties.SerialNumber) {
-				stream.Send(msg)
-			}
-		}, func(ctx context.Context, device wdbd.DeviceEntry) {
-			msg := &wdbd.DeviceEvent{
-				EventType: wdbd.DeviceEventType_Remove,
-				Device: &wdbd.Device{
-					DevType:  wdbd.DeviceType_IOS,
-					ConnType: wdbd.DeviceConnType_Usb,
-					Uid:      device.Properties.SerialNumber,
-				},
-			}
-			if noFilter || filter(device.Properties.SerialNumber) {
-				stream.Send(msg)
-			}
-		},
-	))
+		if noFilter || filter(device.Properties.SerialNumber) {
+			log.Infof("send: %+v", msg)
+			stream.Send(msg)
+		}
+	}
+
+	onRemove := func(ctx context.Context, device wdbd.DeviceEntry) {
+		msg := &wdbd.DeviceEvent{
+			EventType: wdbd.DeviceEventType_Remove,
+			Device: &wdbd.Device{
+				DevType: wdbd.DeviceType_IOS,
+				Uid:     device.Properties.SerialNumber,
+			},
+		}
+
+		if noFilter || filter(device.Properties.SerialNumber) {
+			log.Infof("send: %+v", msg)
+			stream.Send(msg)
+		}
+	}
+
+	for _, device := range s.registry.Devices() {
+		onAdd(stream.Context(), device)
+	}
+
+	s.registry.Listen(wdbd.NewDeviceListener(onAdd, onRemove))
 
 	<-stream.Context().Done()
 	log.Warnln("wdbd: device monitor stream closed")
