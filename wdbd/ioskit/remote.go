@@ -82,6 +82,7 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 				MessageType: ListenMessageAttached,
 				Properties: ios.DeviceProperties{
 					SerialNumber: event.Device.Uid,
+					DeviceID:     globalUsbmuxd.deviceId,
 				},
 			}
 			globalUsbmuxd.registry.AddDevice(ctx, d)

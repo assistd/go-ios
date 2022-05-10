@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/danielpaulus/go-ios/wdbd"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
@@ -148,7 +147,7 @@ func (s *Wdbd) ForwardDevice(stream wdbd.Wdbd_ForwardDeviceServer) error {
 				}
 				log.Infoln("wdbd: forward to device: ", data.DeviceEntry.Uid)
 			*/
-			log.Infoln(hex.Dump(data.Payload))
+			//log.Infoln(hex.Dump(data.Payload))
 			if _, err := devConn.Write(data.Payload); err != nil {
 				break
 			}
@@ -163,7 +162,7 @@ func (s *Wdbd) ForwardDevice(stream wdbd.Wdbd_ForwardDeviceServer) error {
 				break
 			}
 
-			log.Infoln(hex.Dump(buf[:n]))
+			//log.Infoln(hex.Dump(buf[:n]))
 			data := &wdbd.DeviceData{
 				Payload: buf[:n],
 			}
