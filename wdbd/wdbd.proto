@@ -23,6 +23,7 @@ message Device {
   DeviceConnType conn_type = 2; // 设备连接类型
   string uid = 3; // 设备uid
   string name = 4; //设备名字
+  int32 ios_device_id = 5;
 }
 
 message DeviceEvent {

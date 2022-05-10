@@ -14,10 +14,11 @@ import (
 )
 
 type RemoteDevice struct {
-	Type   wdbd.DeviceType
-	Addr   string
-	Serial string
-	conn   *grpc.ClientConn
+	Type        wdbd.DeviceType
+	Addr        string
+	Serial      string
+	conn        *grpc.ClientConn
+	iosDeviceId int
 }
 
 func NewRemoteDevice(ctx context.Context, typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, error) {
@@ -46,6 +47,10 @@ func (r *RemoteDevice) initConn(ctx context.Context) error {
 	return err
 }
 
+func (r *RemoteDevice) GetIOSDeviceId() int {
+	return r.iosDeviceId
+}
+
 func (r *RemoteDevice) Monitor(ctx context.Context) error {
 	client := wdbd.NewWdbdClient(r.conn)
 	req := &wdbd.MonitorRequest{
@@ -70,6 +75,7 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 
 		switch event.EventType {
 		case wdbd.DeviceEventType_Add:
+			r.iosDeviceId = int(event.Device.IosDeviceId)
 			globalUsbmuxd.deviceId++
 			d := wdbd.DeviceEntry{
 				DeviceID:    globalUsbmuxd.deviceId,

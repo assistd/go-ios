@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 )
@@ -135,6 +136,8 @@ func (a *Usbmuxd) Run() error {
 				if r := recover(); r != nil {
 					log.Errorf("Recovered a panic: %v", r)
 					cleanup()
+					debug.PrintStack()
+					os.Exit(1)
 					return
 				}
 			}()

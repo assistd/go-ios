@@ -67,8 +67,8 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			t.handleListen(muxOnUnixSocket)
 			return
 		case MuxMessageTypeConnect:
-			deviceId := decodedRequest["DeviceID"].(int)
-			remoteDevice, err := globalUsbmuxd.GetRemoteDeviceById(deviceId)
+			deviceId := decodedRequest["DeviceID"].(uint64)
+			remoteDevice, err := globalUsbmuxd.GetRemoteDeviceById(int(deviceId))
 			if err != nil {
 				log.Fatalln("unknown serial: ", err)
 			}
@@ -86,7 +86,9 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 				}
 			}
 
-			err = muxToDevice.SendMuxMessage(request)
+			log.Infof("CONNECT: replace DeviceId: %v -> %v", decodedRequest, remoteDevice.GetIOSDeviceId())
+			decodedRequest["DeviceID"] = remoteDevice.GetIOSDeviceId()
+			err = muxToDevice.Send(decodedRequest)
 			if err != nil {
 				log.Errorf("transport: failed write to device: %v", err)
 				muxOnUnixSocket.Close()
@@ -98,9 +100,9 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			//TODO: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
 			t.handleListDevices(muxOnUnixSocket)
 		case MuxMessageTypeListListeners:
-			log.Fatalf("not supported yet")
+			log.Fatalf("not supported %v yet", MuxMessageTypeListListeners)
 		case MuxMessageTypeReadBUID:
-			log.Fatalf("not supported yet")
+			log.Fatalf("not supported %v yet", MuxMessageTypeReadBUID)
 		case MuxMessageTypeReadPairRecord:
 			fallthrough
 		case MuxMessageTypeSavePairRecord:

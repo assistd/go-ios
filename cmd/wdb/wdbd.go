@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"github.com/danielpaulus/go-ios/wdbd"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
@@ -66,8 +67,9 @@ func (s *Wdbd) StartDeviceMonitor(req *wdbd.MonitorRequest, stream wdbd.Wdbd_Sta
 		msg := &wdbd.DeviceEvent{
 			EventType: wdbd.DeviceEventType_Add,
 			Device: &wdbd.Device{
-				DevType: wdbd.DeviceType_IOS,
-				Uid:     device.Properties.SerialNumber,
+				DevType:     wdbd.DeviceType_IOS,
+				Uid:         device.Properties.SerialNumber,
+				IosDeviceId: int32(device.DeviceID),
 			},
 		}
 
@@ -108,9 +110,10 @@ func (s *Wdbd) ListDevices(ctx context.Context, req *wdbd.ListDevicesRequest) (*
 	deviceList := make([]*wdbd.Device, len(devices))
 	for i, d := range devices {
 		deviceList[i] = &wdbd.Device{
-			DevType:  wdbd.DeviceType_IOS,
-			ConnType: wdbd.DeviceConnType_Usb,
-			Uid:      d.Properties.SerialNumber,
+			DevType:     wdbd.DeviceType_IOS,
+			ConnType:    wdbd.DeviceConnType_Usb,
+			Uid:         d.Properties.SerialNumber,
+			IosDeviceId: int32(d.DeviceID),
 		}
 	}
 	return &wdbd.DeviceList{List: deviceList}, nil
@@ -121,7 +124,7 @@ func (s *Wdbd) Conn() (net.Conn, error) {
 }
 
 func (s *Wdbd) ForwardDevice(stream wdbd.Wdbd_ForwardDeviceServer) error {
-	buf := make([]byte, 512*1024)
+	log.Warnln("wdbd: ForwardDevice enter")
 
 	devConn, err := net.Dial(s.network, s.addr)
 	if err != nil {
@@ -145,6 +148,7 @@ func (s *Wdbd) ForwardDevice(stream wdbd.Wdbd_ForwardDeviceServer) error {
 				}
 				log.Infoln("wdbd: forward to device: ", data.DeviceEntry.Uid)
 			*/
+			log.Infoln(hex.Dump(data.Payload))
 			if _, err := devConn.Write(data.Payload); err != nil {
 				break
 			}
@@ -152,15 +156,18 @@ func (s *Wdbd) ForwardDevice(stream wdbd.Wdbd_ForwardDeviceServer) error {
 	}()
 
 	go func() {
+		buf := make([]byte, 512*1024)
 		for {
-			if _, err := devConn.Read(buf); err != nil {
+			n, err := devConn.Read(buf)
+			if err != nil {
 				break
 			}
 
+			log.Infoln(hex.Dump(buf[:n]))
 			data := &wdbd.DeviceData{
-				Payload: buf,
+				Payload: buf[:n],
 			}
-			err := stream.Send(data)
+			err = stream.Send(data)
 			if err != nil {
 				log.Errorln("wdbd: forward: receive err: ", err)
 				break
