@@ -16,25 +16,23 @@ var (
 )
 
 type Usbmuxd struct {
-	registry          *wdbd.Registry
-	socket            string
-	transports        map[*Transport]struct{}
-	mutex             sync.Mutex
-	deviceId          int
-	deviceSerialIdMap map[string]int
-	muxMap            map[string]*RemoteDevice // addr -> RemoteDevice
-	serialMap         map[string]*RemoteDevice // serial -> RemoteDevice
+	registry   *wdbd.Registry
+	socket     string
+	transports map[*Transport]struct{}
+	mutex      sync.Mutex
+	deviceId   int
+	muxMap     map[string]*RemoteDevice // addr -> RemoteDevice
+	serialMap  map[string]*RemoteDevice // serial -> RemoteDevice
 }
 
 // NewUsbmuxd create an Usbmuxd instance
 func NewUsbmuxd(socket string) *Usbmuxd {
 	return &Usbmuxd{
-		registry:          wdbd.NewRegistry(),
-		socket:            socket,
-		transports:        make(map[*Transport]struct{}),
-		deviceSerialIdMap: make(map[string]int),
-		muxMap:            make(map[string]*RemoteDevice),
-		serialMap:         make(map[string]*RemoteDevice),
+		registry:   wdbd.NewRegistry(),
+		socket:     socket,
+		transports: make(map[*Transport]struct{}),
+		muxMap:     make(map[string]*RemoteDevice),
+		serialMap:  make(map[string]*RemoteDevice),
 	}
 }
 

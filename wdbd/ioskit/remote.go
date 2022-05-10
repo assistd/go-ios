@@ -86,17 +86,10 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 			}
 			globalUsbmuxd.registry.AddDevice(ctx, d)
 		case wdbd.DeviceEventType_Remove:
-			id, ok := globalUsbmuxd.deviceSerialIdMap[event.Device.Uid]
-			if !ok {
-				log.Fatalln("unknown")
-			}
-
-			d := wdbd.DeviceEntry{
-				DeviceID:    id,
-				MessageType: ListenMessageDetached,
-				Properties: ios.DeviceProperties{
-					SerialNumber: event.Device.Uid,
-				},
+			d, err := globalUsbmuxd.registry.DeviceBySerial(event.Device.Uid)
+			if err != nil {
+				// should not be here
+				log.Fatalln("unknown device: ", event)
 			}
 			globalUsbmuxd.registry.RemoveDevice(ctx, d)
 		}

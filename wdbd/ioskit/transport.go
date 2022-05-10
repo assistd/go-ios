@@ -229,15 +229,28 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 	// TODO: support ListenMessagePaired
 
-	for _, d := range globalUsbmuxd.registry.Devices() {
-		onAdd(nil, d)
+	// send Listen response
+	resp := &ios.MuxResponse{
+		MessageType: "Result",
+		Number:      0,
+	}
+	err := muxOnUnixSocket.Send(resp)
+	if err != nil {
+		log.Errorln("transport: LISTEN: write failed:", err)
+		cleanup()
+		return
 	}
 
+	// trigger onAdd/onRemove
+	for _, d := range globalUsbmuxd.registry.Devices() {
+		log.Infof("--> %+v", d)
+		onAdd(nil, d)
+	}
 	unListen := globalUsbmuxd.registry.Listen(wdbd.NewDeviceListener(onAdd, onRemove))
 	defer unListen()
 	defer cleanup()
 
 	//use this to detect when the conn is closed. There shouldn't be any messages received ever.
-	_, err := muxOnUnixSocket.ReadMessage()
+	_, err = muxOnUnixSocket.ReadMessage()
 	log.Error("transport: LISTEN: error on read", err)
 }
