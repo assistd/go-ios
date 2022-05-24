@@ -74,7 +74,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			}
 
 			if muxToDevice == nil {
-				devStream, err := remoteDevice.NewStreamConn(context.Background())
+				devStream, err := remoteDevice.NewConn(context.Background())
 				if err != nil {
 					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
 					muxOnUnixSocket.Close()
@@ -116,7 +116,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			}
 
 			if muxToDevice == nil {
-				devStream, err := remoteDevice.NewStreamConn(context.Background())
+				devStream, err := remoteDevice.NewConn(context.Background())
 				if err != nil {
 					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
 					muxOnUnixSocket.Close()

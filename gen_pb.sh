@@ -5,13 +5,13 @@
 # go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
 # go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 
-#list=(
-#./core/bind/device.proto
-#)
-#
-#for i in "${list[@]}"; do
-#    protoc --go_out=./ --go_opt=paths=source_relative $i
-#done
+list=(
+wdbd/wdbd.proto
+)
+
+for i in "${list[@]}"; do
+    protoc --go_out=./ --go_opt=paths=source_relative $i
+done
 
 # grpc version 1.1
 function grpc_gen {
@@ -20,4 +20,4 @@ function grpc_gen {
        --go-grpc_out=. --go-grpc_opt=paths=source_relative $@
 }
 
-grpc_gen wdbd/wdbd.proto
+#grpc_gen wdbd/wdbd.proto

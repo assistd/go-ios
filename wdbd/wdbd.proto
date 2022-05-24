@@ -46,7 +46,7 @@ message ForwardDeviceRequest {
   Device device = 1;
 }
 
-message Message {
+message Request {
   oneof message {
     MonitorRequest monitor = 1;
     ListDevicesRequest list = 2;
@@ -61,6 +61,7 @@ message Response {
   }
 }
 
+/*
 message DeviceData {
   Device device = 1;
   bytes payload = 2;
@@ -77,3 +78,4 @@ service Wdbd {
   rpc ForwardDevice(stream DeviceData) returns (stream DeviceData) {
   }
 }
+ */

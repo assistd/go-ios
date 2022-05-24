@@ -7,11 +7,8 @@ import (
 	"github.com/danielpaulus/go-ios/wdbd"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"net"
 	"path"
 	"runtime"
-	"strconv"
 	"time"
 )
 
@@ -45,28 +42,19 @@ func main() {
 		wdbdSrv, _ := NewWdbd(*usbmuxdPath)
 		go wdbdSrv.Monitor(ctx)
 
-		// start grpc server
-		lis, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-		grpcSrv := grpc.NewServer()
-		wdbd.RegisterWdbdServer(grpcSrv, wdbdSrv)
+		// start wdbd server
 		log.Infof("==========>listen on port %d<==========", *port)
-		if err := grpcSrv.Serve(lis); err != nil {
+		if err := wdbdSrv.Run(ctx, *port); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	case "wdb":
 		ctx2, cancel2 := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel2()
-		remoteDevice, err := ioskit.NewRemoteDevice(
+		remoteDevice := ioskit.NewRemoteDevice(
 			ctx2,
 			wdbd.DeviceType_IOS,
 			"192.168.0.47:8083",
 			"82d8ccbcd9160681f7fd9d377d8e0dff7c6591a5")
-		if err != nil {
-			log.Fatalf("failed to create remote device: %v", err)
-		}
 		log.Infof("connected to remote device: %+v", remoteDevice)
 
 		go func() {

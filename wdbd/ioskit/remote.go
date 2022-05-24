@@ -1,50 +1,29 @@
 package ioskit
 
 import (
-	"bytes"
 	"context"
+	"encoding/binary"
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/wdbd"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 	"io"
 	"net"
-	"sync"
 )
 
 type RemoteDevice struct {
 	Type        wdbd.DeviceType
 	Addr        string
 	Serial      string
-	conn        *grpc.ClientConn
 	iosDeviceId int
 }
 
-func NewRemoteDevice(ctx context.Context, typ wdbd.DeviceType, addr, serial string) (*RemoteDevice, error) {
-	r := &RemoteDevice{
+func NewRemoteDevice(ctx context.Context, typ wdbd.DeviceType, addr, serial string) *RemoteDevice {
+	return &RemoteDevice{
 		Type:   typ,
 		Addr:   addr,
 		Serial: serial,
 	}
-
-	err := r.initConn(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
-func (r *RemoteDevice) initConn(ctx context.Context) error {
-	// Set up a connection to the server.
-	conn, err := grpc.DialContext(ctx, r.Addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock())
-	if err == nil {
-		r.conn = conn
-	}
-	return err
 }
 
 func (r *RemoteDevice) GetIOSDeviceId() int {
@@ -52,145 +31,89 @@ func (r *RemoteDevice) GetIOSDeviceId() int {
 }
 
 func (r *RemoteDevice) Monitor(ctx context.Context) error {
-	client := wdbd.NewWdbdClient(r.conn)
-	req := &wdbd.MonitorRequest{
+	monitor := &wdbd.MonitorRequest{
 		Device: make([]*wdbd.Device, 1),
 	}
-	req.Device[0] = &wdbd.Device{
+	monitor.Device[0] = &wdbd.Device{
 		Uid: r.Serial,
 	}
+	req := &wdbd.Request{
+		Message: &wdbd.Request_Monitor{
+			Monitor: monitor,
+		},
+	}
 
-	stream, err := client.StartDeviceMonitor(ctx, req)
+	conn, err := net.Dial("tcp", r.Addr)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		conn.Close()
+	}()
+
+	lenbuf := make([]byte, 4)
+	b, _ := proto.Marshal(req)
+	binary.BigEndian.PutUint32(lenbuf, uint32(len(b)))
+	_, err = conn.Write(lenbuf)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write(b)
 	if err != nil {
 		return err
 	}
 
+	var buf []byte
 	for {
-		event, err := stream.Recv()
+		_, err := io.ReadFull(conn, lenbuf)
 		if err != nil {
 			return err
 		}
+		bodyLen := int(binary.BigEndian.Uint32(lenbuf))
+		if bodyLen > len(buf) {
+			buf = make([]byte, bodyLen)
+		}
+		_, err = io.ReadFull(conn, buf)
+		if err != nil {
+			break
+		}
+		var msg wdbd.Response
+		err = proto.Unmarshal(buf, &msg)
+		if err != nil {
+			break
+		}
 
-		log.Infoln("recv: ", event)
-
-		switch event.EventType {
+		m, ok := msg.Message.(*wdbd.Response_Event)
+		if !ok {
+			log.Fatalln("not event: ", msg.Message)
+		}
+		switch m.Event.EventType {
 		case wdbd.DeviceEventType_Add:
-			r.iosDeviceId = int(event.Device.IosDeviceId)
+			r.iosDeviceId = int(m.Event.Device.IosDeviceId)
 			globalUsbmuxd.deviceId++
 			d := wdbd.DeviceEntry{
 				DeviceID:    globalUsbmuxd.deviceId,
 				MessageType: ListenMessageAttached,
 				Properties: ios.DeviceProperties{
-					SerialNumber: event.Device.Uid,
+					SerialNumber: m.Event.Device.Uid,
 					DeviceID:     globalUsbmuxd.deviceId,
 				},
 			}
 			globalUsbmuxd.registry.AddDevice(ctx, d)
 		case wdbd.DeviceEventType_Remove:
-			d, err := globalUsbmuxd.registry.DeviceBySerial(event.Device.Uid)
+			d, err := globalUsbmuxd.registry.DeviceBySerial(m.Event.Device.Uid)
 			if err != nil {
 				// should not be here
-				log.Fatalln("unknown device: ", event)
+				log.Fatalln("unknown device: ", m.Event)
 			}
 			globalUsbmuxd.registry.RemoveDevice(ctx, d)
 		}
 	}
+
+	return io.EOF
 }
 
-type StreamConn struct {
-	serial string
-	buf    *bytes.Buffer
-	stream wdbd.Wdbd_ForwardDeviceClient
-}
-
-func (s *StreamConn) Read(p []byte) (n int, err error) {
-	if s.buf.Len() == 0 {
-		inData, err := s.stream.Recv()
-		if err != nil {
-			return 0, err
-		}
-		s.buf.Write(inData.Payload)
-	}
-	return s.buf.Read(p)
-}
-
-func (s *StreamConn) Write(p []byte) (n int, err error) {
-	data := &wdbd.DeviceData{
-		Device: &wdbd.Device{
-			Uid: s.serial,
-		},
-		Payload: p,
-	}
-
-	n = len(p)
-	err = s.stream.Send(data)
-	return
-}
-
-func (r *RemoteDevice) NewStreamConn(ctx context.Context) (io.ReadWriter, error) {
-	client := wdbd.NewWdbdClient(r.conn)
-	stream, err := client.ForwardDevice(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &StreamConn{
-		buf:    bytes.NewBuffer(nil),
-		stream: stream,
-		serial: r.Serial,
-	}, nil
-}
-
-func (r *RemoteDevice) Connect(ctx context.Context, sendChan chan []byte, conn net.Conn) error {
-	client := wdbd.NewWdbdClient(r.conn)
-	stream, err := client.ForwardDevice(ctx)
-	if err != nil {
-		return err
-	}
-
-	data := &wdbd.DeviceData{
-		Device: &wdbd.Device{
-			Uid: r.Serial,
-		},
-	}
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	// write loop
-	go func() {
-		defer wg.Done()
-
-		for {
-			packet, ok := <-sendChan
-			if packet == nil || !ok {
-				return
-			}
-
-			data.Payload = packet
-			err := stream.Send(data)
-			if err != nil {
-				return
-			}
-		}
-	}()
-
-	wg.Add(1)
-	// read loop
-	go func() {
-		defer wg.Done()
-		for {
-			inData, err := stream.Recv()
-			if err != nil {
-				return
-			}
-			_, err = conn.Write(inData.Payload)
-			if err != nil {
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-	return nil
+func (r *RemoteDevice) NewConn(ctx context.Context) (net.Conn, error) {
+	conn, err := net.Dial("tcp", r.Addr)
+	return conn, err
 }
