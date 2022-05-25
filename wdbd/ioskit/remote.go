@@ -73,20 +73,26 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 		if bodyLen > len(buf) {
 			buf = make([]byte, bodyLen)
 		}
-		_, err = io.ReadFull(conn, buf)
+
+		buf2 := buf[:bodyLen]
+		log.Infof("wdb: recv: %v", bodyLen)
+		_, err = io.ReadFull(conn, buf2)
 		if err != nil {
+			log.Errorln("wdb: recv failed: ", err)
 			break
 		}
 		var msg wdbd.Response
-		err = proto.Unmarshal(buf, &msg)
+		err = proto.Unmarshal(buf2, &msg)
 		if err != nil {
+			log.Errorln("wdb: unmarshal failed: ", err)
 			break
 		}
-
 		m, ok := msg.Message.(*wdbd.Response_Event)
 		if !ok {
 			log.Fatalln("not event: ", msg.Message)
 		}
+		log.Infof("wdb: recv: %v", m)
+
 		switch m.Event.EventType {
 		case wdbd.DeviceEventType_Add:
 			r.iosDeviceId = int(m.Event.Device.IosDeviceId)
@@ -115,5 +121,25 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 
 func (r *RemoteDevice) NewConn(ctx context.Context) (net.Conn, error) {
 	conn, err := net.Dial("tcp", r.Addr)
-	return conn, err
+	req := &wdbd.Request{
+		Message: &wdbd.Request_Forward{
+			Forward: &wdbd.ForwardDeviceRequest{},
+		},
+	}
+
+	lenbuf := make([]byte, 4)
+	b, _ := proto.Marshal(req)
+	binary.BigEndian.PutUint32(lenbuf, uint32(len(b)))
+	_, err = conn.Write(lenbuf)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	_, err = conn.Write(b)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	return conn, nil
 }

@@ -84,16 +84,22 @@ func (s *Wdbd) handleConn(ctx context.Context, conn net.Conn) {
 		if bodyLen > len(buf) {
 			buf = make([]byte, bodyLen)
 		}
-		_, err = io.ReadFull(conn, buf)
+
+		buf2 := buf[:bodyLen]
+		log.Infof("wdb: recv: %v", bodyLen)
+		_, err = io.ReadFull(conn, buf2)
 		if err != nil {
+			log.Errorln("wdb: recv failed: ", err)
 			break
 		}
 		var msg wdbd.Request
-		err = proto.Unmarshal(buf, &msg)
+		err = proto.Unmarshal(buf2, &msg)
 		if err != nil {
+			log.Errorln("wdb: unmarshal failed: ", err)
 			break
 		}
 
+		log.Infoln("wdb: recv: ", msg.Message)
 		s.handleMessage(ctx, &msg, conn)
 	}
 
@@ -158,10 +164,15 @@ func (s *Wdbd) startDeviceMonitor(ctx context.Context, req *wdbd.MonitorRequest,
 			}
 
 			b, err := proto.Marshal(msg)
+			lenbuf := make([]byte, 4)
+			binary.BigEndian.PutUint32(lenbuf, uint32(len(b)))
 			if err == nil {
-				_, err = stream.Write(b)
+				_, err = stream.Write(lenbuf)
 				if err == nil {
-					return
+					_, err = stream.Write(b)
+					if err == nil {
+						return
+					}
 				}
 			}
 
@@ -186,10 +197,15 @@ func (s *Wdbd) startDeviceMonitor(ctx context.Context, req *wdbd.MonitorRequest,
 			}
 			log.Infof("send: %+v", msg)
 			b, err := proto.Marshal(msg)
+			lenbuf := make([]byte, 4)
+			binary.BigEndian.PutUint32(lenbuf, uint32(len(b)))
 			if err == nil {
-				_, err = stream.Write(b)
+				_, err = stream.Write(lenbuf)
 				if err == nil {
-					return
+					_, err = stream.Write(b)
+					if err == nil {
+						return
+					}
 				}
 			}
 
@@ -231,10 +247,12 @@ func (s *Wdbd) listDevices(ctx context.Context, req *wdbd.ListDevicesRequest, st
 	}
 
 	b, err := proto.Marshal(msg)
+	lenbuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(lenbuf, uint32(len(b)))
 	if err == nil {
-		_, err = stream.Write(b)
+		_, err = stream.Write(lenbuf)
 		if err == nil {
-			return nil
+			_, err = stream.Write(b)
 		}
 	}
 	stream.Close()
