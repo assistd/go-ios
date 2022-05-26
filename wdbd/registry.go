@@ -151,7 +151,7 @@ func (r *Registry) RemoveDevice(ctx context.Context, d DeviceEntry) {
 	r.Lock()
 	defer r.Unlock()
 	for i, t := range r.devices {
-		if t.DeviceID == d.DeviceID || t.Properties.SerialNumber == t.Properties.SerialNumber {
+		if t.DeviceID == d.DeviceID || t.Properties.SerialNumber == d.Properties.SerialNumber {
 			log.Info("Removing existing device")
 			copy(r.devices[i:], r.devices[i+1:])
 			r.devices = r.devices[:len(r.devices)-1]
