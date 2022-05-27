@@ -121,6 +121,9 @@ func (r *RemoteDevice) Monitor(ctx context.Context) error {
 
 func (r *RemoteDevice) NewConn(ctx context.Context) (net.Conn, error) {
 	conn, err := net.Dial("tcp", r.Addr)
+	if err != nil {
+		return nil, err
+	}
 	req := &wdbd.Request{
 		Message: &wdbd.Request_Forward{
 			Forward: &wdbd.ForwardDeviceRequest{},
