@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/danielpaulus/go-ios/ios/afc"
 	"github.com/danielpaulus/go-ios/ios/imagemounter"
 	"github.com/danielpaulus/go-ios/ios/zipconduit"
 	"io/ioutil"
@@ -88,6 +89,8 @@ Usage:
   ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [options]
   ios ax [options]
   ios reboot [options]
+  ios fsync (rm | tree | mkdir) --path=<targetPath>
+  ios fsync pull --srcPath=<srcPath> --dstPath=<dstPath>
   ios -h | --help
   ios --version | version [options]
 
@@ -464,7 +467,49 @@ The commands work as following:
 		}
 		return
 	}
+	b, _ = arguments.Bool("fsync")
+	if b {
+		afcService, err := afc.New(device)
+		exitIfError("fsync: connect afc service failed", err)
+		b, _ = arguments.Bool("rm")
+		if b {
+			path, _ := arguments.String("--path")
+			err = afcService.Remove(path)
+			exitIfError("fsync: remove failed", err)
+		}
 
+		b, _ = arguments.Bool("tree")
+		if b {
+			path, _ := arguments.String("--path")
+			err = afcService.TreeView(path, "", true)
+			exitIfError("fsync: tree view failed", err)
+		}
+
+		b, _ = arguments.Bool("mkdir")
+		if b {
+			path, _ := arguments.String("--path")
+			err = afcService.MakeDir(path)
+			exitIfError("fsync: mkdir failed", err)
+		}
+
+		b, _ = arguments.Bool("pull")
+		if b {
+			sp, _ := arguments.String("--srcPath")
+			dp, _ := arguments.String("--dstPath")
+			if dp != "" {
+				ret, _ := ios.PathExists(dp)
+				if !ret {
+					err = os.MkdirAll(dp, os.ModePerm)
+					exitIfError("mkdir failed", err)
+				}
+			}
+			dp = path.Join(dp, filepath.Base(sp))
+			err = afcService.Pull(sp, dp)
+			exitIfError("fsync: pull failed", err)
+		}
+		afcService.Close()
+		return
+	}
 }
 
 func fixDevImage(device ios.DeviceEntry, baseDir string) {
