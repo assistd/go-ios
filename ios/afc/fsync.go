@@ -306,3 +306,7 @@ func (conn *Connection) Pull(srcPath, dstPath string) error {
 	}
 	return nil
 }
+
+func (conn *Connection) Close() {
+	conn.deviceConn.Close()
+}
