@@ -118,7 +118,7 @@ func (conn *Connection) openFileForWriting(filePath string) (byte, error) {
 	pathBytes := []byte(filePath)
 	headerLength := 8 + uint64(len(pathBytes))
 	headerPayload := make([]byte, headerLength)
-	binary.LittleEndian.PutUint64(headerPayload, afc.Afc_fopen_wronly)
+	binary.LittleEndian.PutUint64(headerPayload, afc.Afc_Mode_RDONLY)
 	copy(headerPayload[8:], pathBytes)
 	this_length := afc.Afc_header_size + headerLength
 	header := afc.AfcPacketHeader{Magic: afc.Afc_magic, Packet_num: conn.packageNumber, Operation: afc.Afc_operation_file_open, This_length: this_length, Entire_length: this_length}

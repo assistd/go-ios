@@ -9,13 +9,23 @@ import (
 const (
 	Afc_magic                      uint64 = 0x4141504c36414643
 	Afc_header_size                uint64 = 40
-	Afc_fopen_wronly               uint64 = 0x3
-	Afc_operation_status           uint64 = 0x1
-	Afc_operation_read_dir         uint64 = 0x3
+	Afc_operation_status           uint64 = 0x00000001
+	Afc_operation_data             uint64 = 0x00000002
+	Afc_operation_read_dir         uint64 = 0x00000003
+	Afc_operation_remove_path      uint64 = 0x00000008
 	Afc_operation_file_open        uint64 = 0x0000000D
 	Afc_operation_file_close       uint64 = 0x00000014
 	Afc_operation_file_write       uint64 = 0x00000010
 	Afc_operation_file_open_result uint64 = 0x0000000E
+)
+
+const (
+	Afc_Mode_RDONLY   uint64 = 0x00000001
+	Afc_Mode_RW       uint64 = 0x00000002
+	Afc_Mode_WRONLY   uint64 = 0x00000003
+	Afc_Mode_WR       uint64 = 0x00000004
+	Afc_Mode_APPEND   uint64 = 0x00000005
+	Afc_Mode_RDAPPEND uint64 = 0x00000006
 )
 
 type AfcPacketHeader struct {
