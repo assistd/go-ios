@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	"log"
+	"path"
 	"testing"
 )
 
@@ -33,7 +34,7 @@ func TestConnection_Mkdir(t *testing.T) {
 
 	err = conn.MakeDir("/DCIM/TestDir")
 	if err != nil {
-		log.Fatalf("remove failed:%v", err)
+		log.Fatalf("mkdir failed:%v", err)
 	}
 }
 
@@ -93,6 +94,22 @@ func TestConnection_pullSingleFile(t *testing.T) {
 
 	err = conn.pullSingleFile("/DCIM/architecture_diagram.png", "architecture_diagram.png")
 	if err != nil {
-		log.Fatalf("tree view failed:%v", err)
+		log.Fatalf("pull single file failed:%v", err)
+	}
+}
+
+func TestConnection_Pull(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+	srcPath := "/DCIM/"
+	dstpath := "TempRecv"
+	dstpath = path.Join(dstpath, srcPath)
+	err = conn.Pull(srcPath, dstpath)
+	if err != nil {
+		log.Fatalf("pull failed:%v", err)
 	}
 }

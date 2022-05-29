@@ -210,7 +210,7 @@ func (conn *Connection) openFile(path string, mode uint64) (byte, error) {
 	if err != nil {
 		return 0, err
 	}
-	if response.Header.Operation != Afc_operation_file_open_result {
+	if !conn.checkOperationStatus(response.Header.Operation) {
 		return 0, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
 	}
 	return response.HeaderPayload[0], nil
@@ -227,7 +227,7 @@ func (conn *Connection) closeFile(handle byte) error {
 	if err != nil {
 		return err
 	}
-	if response.Header.Operation != Afc_operation_status {
+	if !conn.checkOperationStatus(response.Header.Operation) {
 		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
 	}
 	return nil
@@ -272,6 +272,37 @@ func (conn *Connection) pullSingleFile(srcPath, dstPath string) error {
 		}
 		leftSize = leftSize - int64(len(response.Payload))
 		f.Write(response.Payload)
+	}
+	return nil
+}
+
+func (conn *Connection) Pull(srcPath, dstPath string) error {
+	fileInfo, err := conn.stat(srcPath)
+	if err != nil {
+		return err
+	}
+	if fileInfo.isDir() {
+		ret, _ := ios.PathExists(dstPath)
+		if !ret {
+			err = os.MkdirAll(dstPath, os.ModePerm)
+			if err != nil {
+				return err
+			}
+		}
+		fileList, err := conn.listDir(srcPath)
+		if err != nil {
+			return err
+		}
+		for _, v := range fileList {
+			sp := path.Join(srcPath, v)
+			dp := path.Join(dstPath, v)
+			err = conn.Pull(sp, dp)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		return conn.pullSingleFile(srcPath, dstPath)
 	}
 	return nil
 }
