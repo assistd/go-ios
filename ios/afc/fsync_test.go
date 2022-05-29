@@ -82,3 +82,17 @@ func TestConnection_TreeView(t *testing.T) {
 		log.Fatalf("tree view failed:%v", err)
 	}
 }
+
+func TestConnection_pullSingleFile(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	err = conn.pullSingleFile("/DCIM/architecture_diagram.png", "architecture_diagram.png")
+	if err != nil {
+		log.Fatalf("tree view failed:%v", err)
+	}
+}

@@ -19,6 +19,7 @@ const (
 	Afc_operation_file_close       uint64 = 0x00000014
 	Afc_operation_file_write       uint64 = 0x00000010
 	Afc_operation_file_open_result uint64 = 0x0000000E
+	Afc_operation_file_read        uint64 = 0x0000000F
 )
 
 const (
