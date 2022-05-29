@@ -1,6 +1,7 @@
 package afc
 
 import (
+	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	"log"
 	"testing"
@@ -49,4 +50,35 @@ func TestConnection_stat(t *testing.T) {
 		log.Fatalf("get stat failed:%v", err)
 	}
 	log.Printf("stat :%+v", si)
+}
+
+func TestConnection_listDir(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	flist, err := conn.listDir("/DCIM/")
+	if err != nil {
+		log.Fatalf("tree view failed:%v", err)
+	}
+	for _, v := range flist {
+		fmt.Printf("path: %+v\n", v)
+	}
+}
+
+func TestConnection_TreeView(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	err = conn.TreeView("/DCIM/", "", true)
+	if err != nil {
+		log.Fatalf("tree view failed:%v", err)
+	}
 }

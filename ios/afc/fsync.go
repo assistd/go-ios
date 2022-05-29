@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
+	"path"
+	"path/filepath"
 	"strconv"
 )
 
@@ -127,4 +129,66 @@ func (conn *Connection) stat(path string) (*statInfo, error) {
 	si.stIfmt = statInfoMap["st_ifmt"]
 	si.stLinktarget = statInfoMap["st_linktarget"]
 	return &si, nil
+}
+
+func (conn *Connection) listDir(path string) ([]string, error) {
+	headerPayload := []byte(path)
+	headerLength := uint64(len(headerPayload))
+	thisLength := Afc_header_size + headerLength
+
+	header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_read_dir, This_length: thisLength, Entire_length: thisLength}
+	conn.packageNumber++
+	packet := AfcPacket{Header: header, HeaderPayload: headerPayload, Payload: make([]byte, 0)}
+	response, err := conn.sendAfcPacketAndAwaitResponse(packet)
+	if err != nil {
+		return nil, err
+	}
+	if !conn.checkOperationStatus(response.Header.Operation) {
+		return nil, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	}
+	ret := bytes.Split(response.Payload, []byte{0})
+	var fileList []string
+	for _, v := range ret {
+		if string(v) != "." && string(v) != ".." && string(v) != "" {
+			fileList = append(fileList, string(v))
+		}
+	}
+	return fileList, nil
+}
+
+func (conn *Connection) TreeView(dpath string, prefix string, treePoint bool) error {
+	fileInfo, err := conn.stat(dpath)
+	if err != nil {
+		return err
+	}
+	namePrefix := "`--"
+	if !treePoint {
+		namePrefix = "|--"
+	}
+	tPrefix := prefix + namePrefix
+	if fileInfo.isDir() {
+		fmt.Printf("%s %s/\n", tPrefix, filepath.Base(dpath))
+		fileList, err := conn.listDir(dpath)
+		if err != nil {
+			return err
+		}
+		for i, v := range fileList {
+			tp := false
+			if i == len(fileList)-1 {
+				tp = true
+			}
+			rp := prefix + "    "
+			if !treePoint {
+				rp = prefix + "|   "
+			}
+			nPath := path.Join(dpath, v)
+			err = conn.TreeView(nPath, rp, tp)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		fmt.Printf("%s %s\n", tPrefix, filepath.Base(dpath))
+	}
+	return nil
 }
