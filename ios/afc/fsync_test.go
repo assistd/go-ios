@@ -8,7 +8,7 @@ import (
 
 const test_device_udid = "f90589e357ef231602d3bbed14ba748af2ed8373"
 
-func TestRemove(t *testing.T) {
+func TestConnection_Remove(t *testing.T) {
 	deviceEnrty, _ := ios.GetDevice(test_device_udid)
 
 	conn, err := New(deviceEnrty)
@@ -17,6 +17,20 @@ func TestRemove(t *testing.T) {
 	}
 
 	err = conn.Remove("/DCIM/goios")
+	if err != nil {
+		log.Fatalf("remove failed:%v", err)
+	}
+}
+
+func TestConnection_Mkdir(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	err = conn.MakeDir("/DCIM/TestDir")
 	if err != nil {
 		log.Fatalf("remove failed:%v", err)
 	}

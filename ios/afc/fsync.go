@@ -52,3 +52,21 @@ func (conn *Connection) Remove(path string) error {
 	}
 	return nil
 }
+
+func (conn *Connection) MakeDir(path string) error {
+	headerPayload := []byte(path)
+	headerLength := uint64(len(headerPayload))
+	thisLength := Afc_header_size + headerLength
+
+	header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_make_dir, This_length: thisLength, Entire_length: thisLength}
+	conn.packageNumber++
+	packet := AfcPacket{Header: header, HeaderPayload: headerPayload, Payload: make([]byte, 0)}
+	response, err := conn.sendAfcPacketAndAwaitResponse(packet)
+	if err != nil {
+		return err
+	}
+	if !conn.checkOperationStatus(response.Header.Operation) {
+		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	}
+	return nil
+}
