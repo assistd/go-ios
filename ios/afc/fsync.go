@@ -1,8 +1,10 @@
 package afc
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
+	"strconv"
 )
 
 const serviceName = "com.apple.afc"
@@ -10,6 +12,24 @@ const serviceName = "com.apple.afc"
 type Connection struct {
 	deviceConn    ios.DeviceConnectionInterface
 	packageNumber uint64
+}
+
+type statInfo struct {
+	stSize       int64
+	stBlocks     int64
+	stCtime      int64
+	stMtime      int64
+	stNlink      string
+	stIfmt       string
+	stLinktarget string
+}
+
+func (s *statInfo) isDir() bool {
+	return s.stIfmt == "S_IFDIR"
+}
+
+func (s *statInfo) isLink() bool {
+	return s.stIfmt == "S_IFLNK"
 }
 
 func New(device ios.DeviceEntry) (*Connection, error) {
@@ -69,4 +89,42 @@ func (conn *Connection) MakeDir(path string) error {
 		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
 	}
 	return nil
+}
+
+func (conn *Connection) stat(path string) (*statInfo, error) {
+	headerPayload := []byte(path)
+	headerLength := uint64(len(headerPayload))
+	thisLength := Afc_header_size + headerLength
+
+	header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_file_info, This_length: thisLength, Entire_length: thisLength}
+	conn.packageNumber++
+	packet := AfcPacket{Header: header, HeaderPayload: headerPayload, Payload: make([]byte, 0)}
+	response, err := conn.sendAfcPacketAndAwaitResponse(packet)
+	if err != nil {
+		return &statInfo{}, err
+	}
+	if !conn.checkOperationStatus(response.Header.Operation) {
+		return &statInfo{}, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	}
+	ret := bytes.Split(response.Payload, []byte{0})
+	retLen := len(ret)
+	if retLen%2 != 0 {
+		retLen = retLen - 1
+	}
+	statInfoMap := make(map[string]string)
+	for i := 0; i <= retLen-2; i = i + 2 {
+		k := string(ret[i])
+		v := string(ret[i+1])
+		statInfoMap[k] = v
+	}
+
+	var si statInfo
+	si.stSize, _ = strconv.ParseInt(statInfoMap["st_size"], 10, 64)
+	si.stBlocks, _ = strconv.ParseInt(statInfoMap["st_blocks"], 10, 64)
+	si.stCtime, _ = strconv.ParseInt(statInfoMap["st_birthtime"], 10, 64)
+	si.stMtime, _ = strconv.ParseInt(statInfoMap["st_mtime"], 10, 64)
+	si.stNlink = statInfoMap["st_nlink"]
+	si.stIfmt = statInfoMap["st_ifmt"]
+	si.stLinktarget = statInfoMap["st_linktarget"]
+	return &si, nil
 }
