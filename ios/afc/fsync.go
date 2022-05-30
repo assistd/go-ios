@@ -317,6 +317,12 @@ func (conn *Connection) Push(srcPath, dstPath string) error {
 	}
 	defer f.Close()
 
+	if fileInfo, _ := conn.stat(dstPath); fileInfo != nil {
+		if fileInfo.isDir() {
+			dstPath = path.Join(dstPath, filepath.Base(srcPath))
+		}
+	}
+
 	fd, err := conn.openFile(dstPath, Afc_Mode_WR)
 	if err != nil {
 		return err
