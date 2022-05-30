@@ -113,3 +113,19 @@ func TestConnection_Pull(t *testing.T) {
 		log.Fatalf("pull failed:%v", err)
 	}
 }
+
+func TestConnection_Push(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	srcPath := "your src path"
+	dstpath := "your dst path"
+
+	err = conn.Push(srcPath, dstpath)
+	if err != nil {
+		log.Fatalf("push failed:%v", err)
+	}
+}

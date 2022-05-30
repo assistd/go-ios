@@ -90,7 +90,7 @@ Usage:
   ios ax [options]
   ios reboot [options]
   ios fsync (rm | tree | mkdir) --path=<targetPath>
-  ios fsync pull --srcPath=<srcPath> --dstPath=<dstPath>
+  ios fsync (pull | push) --srcPath=<srcPath> --dstPath=<dstPath>
   ios -h | --help
   ios --version | version [options]
 
@@ -506,6 +506,13 @@ The commands work as following:
 			dp = path.Join(dp, filepath.Base(sp))
 			err = afcService.Pull(sp, dp)
 			exitIfError("fsync: pull failed", err)
+		}
+		b, _ = arguments.Bool("push")
+		if b {
+			sp, _ := arguments.String("--srcPath")
+			dp, _ := arguments.String("--dstPath")
+			err = afcService.Push(sp, dp)
+			exitIfError("fsync: push failed", err)
 		}
 		afcService.Close()
 		return

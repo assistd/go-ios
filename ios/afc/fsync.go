@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -303,6 +304,52 @@ func (conn *Connection) Pull(srcPath, dstPath string) error {
 		}
 	} else {
 		return conn.pullSingleFile(srcPath, dstPath)
+	}
+	return nil
+}
+
+func (conn *Connection) Push(srcPath, dstPath string) error {
+	ret, _ := ios.PathExists(srcPath)
+	if !ret {
+		return fmt.Errorf("%s: no such file.", srcPath)
+	}
+
+	f, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fd, err := conn.openFile(dstPath, Afc_Mode_WR)
+	if err != nil {
+		return err
+	}
+	defer conn.closeFile(fd)
+
+	maxWriteSize := 64 * 1024
+	chunk := make([]byte, maxWriteSize)
+	for {
+		n, err := f.Read(chunk)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+
+		headerPayload := make([]byte, 8)
+		headerPayload[0] = fd
+		thisLength := Afc_header_size + 8
+		header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_file_write, This_length: thisLength, Entire_length: thisLength + uint64(n)}
+		conn.packageNumber++
+		packet := AfcPacket{Header: header, HeaderPayload: headerPayload, Payload: chunk}
+		response, err := conn.sendAfcPacketAndAwaitResponse(packet)
+		if err != nil {
+			return err
+		}
+		if !conn.checkOperationStatus(response.Header.Operation) {
+			return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+		}
 	}
 	return nil
 }
