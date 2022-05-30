@@ -32,7 +32,7 @@ func TestConnection_Mkdir(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	err = conn.MakeDir("/DCIM/TestDir")
+	err = conn.MkDir("/DCIM/TestDir")
 	if err != nil {
 		log.Fatalf("mkdir failed:%v", err)
 	}

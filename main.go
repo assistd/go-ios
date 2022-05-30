@@ -488,7 +488,7 @@ The commands work as following:
 		b, _ = arguments.Bool("mkdir")
 		if b {
 			path, _ := arguments.String("--path")
-			err = afcService.MakeDir(path)
+			err = afcService.MkDir(path)
 			exitIfError("fsync: mkdir failed", err)
 		}
 

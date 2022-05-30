@@ -40,7 +40,7 @@ func (s *statInfo) isLink() bool {
 func New(device ios.DeviceEntry) (*Connection, error) {
 	deviceConn, err := ios.ConnectToService(device, serviceName)
 	if err != nil {
-		return &Connection{}, err
+		return nil, err
 	}
 	return &Connection{deviceConn: deviceConn}, nil
 }
@@ -54,10 +54,7 @@ func (conn *Connection) sendAfcPacketAndAwaitResponse(packet AfcPacket) (AfcPack
 }
 
 func (conn *Connection) checkOperationStatus(status uint64) bool {
-	if status == Afc_operation_status || status == Afc_operation_data || status == Afc_operation_file_close || status == Afc_operation_file_open_result {
-		return true
-	}
-	return false
+	return status == Afc_operation_status || status == Afc_operation_data || status == Afc_operation_file_close || status == Afc_operation_file_open_result
 }
 
 func (conn *Connection) Remove(path string) error {
@@ -78,7 +75,7 @@ func (conn *Connection) Remove(path string) error {
 	return nil
 }
 
-func (conn *Connection) MakeDir(path string) error {
+func (conn *Connection) MkDir(path string) error {
 	headerPayload := []byte(path)
 	headerLength := uint64(len(headerPayload))
 	thisLength := Afc_header_size + headerLength
@@ -106,10 +103,10 @@ func (conn *Connection) stat(path string) (*statInfo, error) {
 	packet := AfcPacket{Header: header, HeaderPayload: headerPayload, Payload: make([]byte, 0)}
 	response, err := conn.sendAfcPacketAndAwaitResponse(packet)
 	if err != nil {
-		return &statInfo{}, err
+		return nil, err
 	}
 	if !conn.checkOperationStatus(response.Header.Operation) {
-		return &statInfo{}, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+		return nil, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
 	}
 	ret := bytes.Split(response.Payload, []byte{0})
 	retLen := len(ret)
