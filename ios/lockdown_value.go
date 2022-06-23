@@ -3,6 +3,7 @@ package ios
 import (
 	"bytes"
 	"fmt"
+	"github.com/Masterminds/semver"
 
 	plist "howett.net/plist"
 )
@@ -138,11 +139,31 @@ func newSetValue(key string, domain string, value string) valueRequest {
 
 //GetValues retrieves a GetAllValuesResponse containing all values lockdown returns
 func (lockDownConn *LockDownConnection) GetValues() (GetAllValuesResponse, error) {
-	lockDownConn.Send(newGetValue(""))
+	err := lockDownConn.Send(newGetValue(""))
+	if err != nil {
+		return GetAllValuesResponse{}, err
+	}
 	resp, err := lockDownConn.ReadMessage()
-
+	if err != nil {
+		return GetAllValuesResponse{}, err
+	}
 	response := getAllValuesResponseFromBytes(resp)
-	return response, err
+	return response, nil
+}
+
+//GetProductVersion gets the iOS version of a device
+func GetProductVersion(device DeviceEntry) (*semver.Version, error) {
+	lockdownConnection, err := ConnectLockdownWithSession(device)
+	if err != nil {
+		return &semver.Version{}, err
+	}
+	defer lockdownConnection.Close()
+	version, err := lockdownConnection.GetProductVersion()
+	if err != nil {
+		return &semver.Version{}, err
+	}
+	v, err := semver.NewVersion(version)
+	return v, err
 }
 
 //GetProductVersion returns the ProductVersion of the device f.ex. "10.3"
@@ -209,17 +230,6 @@ func getAllValuesResponseFromBytes(plistBytes []byte) GetAllValuesResponse {
 	var getAllValuesResponse GetAllValuesResponse
 	_ = decoder.Decode(&getAllValuesResponse)
 	return getAllValuesResponse
-}
-
-//GetDomainValuesPlist returns the domain info
-func GetDomainValuesPlist(device DeviceEntry, domain, key string) (interface{}, error) {
-	lockDownConn, err := ConnectLockdownWithSession(device)
-	if err != nil {
-		return struct{}{}, err
-	}
-	defer lockDownConn.Close()
-	resp, err := lockDownConn.GetValueForDomain(key, domain)
-	return resp, err
 }
 
 //GetValuesPlist returns the full lockdown values response as a map, so it can be converted to JSON easily.

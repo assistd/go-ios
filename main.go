@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios/afc"
@@ -86,7 +87,7 @@ Usage:
   ios apps [--system] [options]
   ios launch <bundleID> [options]
   ios runtest <bundleID> [options]
-  ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [options]
+  ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--arg=<a>]... [--env=<e>]... [options]
   ios ax [options]
   ios reboot [options]
   ios fsync (rm | tree | mkdir) --path=<targetPath>
@@ -133,7 +134,8 @@ The commands work as following:
    ios apps [--system]                                                Retrieves a list of installed applications. --system prints out preinstalled system apps.
    ios launch <bundleID>                                              Launch app with the bundleID on the device. Get your bundle ID from the apps command.
    ios runtest <bundleID>                                             Run a XCUITest. 
-   ios runwda [options]                                               Start WebDriverAgent
+   ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--arg=<a>]... [--env=<e>]...[options]  runs WebDriverAgents
+   >                                                                  specify runtime args and env vars like --env ENV_1=something --env ENV_2=else  and --arg ARG1 --arg ARG2
    ios ax [options]                                                   Access accessibility inspector features. 
    ios reboot [options]                                               Reboot the given device
    ios -h | --help                                                    Prints this screen.
@@ -416,10 +418,11 @@ The commands work as following:
 
 	b, _ = arguments.Bool("runwda")
 	if b {
-
 		bundleID, _ := arguments.String("--bundleid")
 		testbundleID, _ := arguments.String("--testrunnerbundleid")
 		xctestconfig, _ := arguments.String("--xctestconfig")
+		wdaargs := arguments["--arg"].([]string)
+		wdaenv := arguments["--env"].([]string)
 
 		if bundleID == "" && testbundleID == "" && xctestconfig == "" {
 			log.Info("no bundle ids specified, falling back to defaults")
@@ -431,7 +434,7 @@ The commands work as following:
 		}
 		log.WithFields(log.Fields{"bundleid": bundleID, "testbundleid": testbundleID, "xctestconfig": xctestconfig}).Info("Running wda")
 		go func() {
-			err := testmanagerd.RunXCUIWithBundleIds(bundleID, testbundleID, xctestconfig, device)
+			err := testmanagerd.RunXCUIWithBundleIdsCtx(context.Background(), bundleID, testbundleID, xctestconfig, device, wdaargs, wdaenv)
 
 			if err != nil {
 				log.WithFields(log.Fields{"error": err}).Fatal("Failed running WDA")
@@ -837,7 +840,7 @@ func startListening() {
 }
 
 func printDeviceInfo(device ios.DeviceEntry, domain, key string) {
-	allValues, err := ios.GetDomainValuesPlist(device, domain, key)
+	allValues, err := ios.GetValuesPlist(device)
 	if err != nil {
 		exitIfError("failed getting info", err)
 	}
