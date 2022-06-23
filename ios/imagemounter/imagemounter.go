@@ -58,7 +58,7 @@ func (conn *Connection) ListImages() ([][]byte, error) {
 	}
 	signatures, ok := resp["ImageSignature"]
 	if !ok {
-		return nil, fmt.Errorf("invalid response: %+v", signatures)
+		return [][]byte{}, nil
 	}
 
 	array, ok := signatures.([]interface{})

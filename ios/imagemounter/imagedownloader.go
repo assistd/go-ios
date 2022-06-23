@@ -8,12 +8,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"path"
 	"path/filepath"
 	"strings"
 )
 
-const repo = "https://github.com/haikieu/xcode-developer-disk-image-all-platforms/raw/master/DiskImages/iPhoneOS.platform/DeviceSupport/%s.zip"
+const repo = "https://github.com/JinjunHan/iOSDeviceSupport/raw/master/DeviceSupport/%s.zip"
 const imagepath = "devimages"
 const developerDiskImageDmg = "DeveloperDiskImage.dmg"
 
@@ -31,6 +32,11 @@ func DownloadImageFor(device ios.DeviceEntry, baseDir string) (string, error) {
 		log.Infof("%s already downloaded from https://github.com/haikieu/", imageDownloaded)
 		return imageDownloaded, nil
 	}
+
+        subVersions := strings.Split(version, ".")
+        if len(subVersions) > 2 {
+            version = fmt.Sprintf("%v.%v", subVersions[0], subVersions[1])
+        }
 
 	log.Infof("getting developer image for iOS %s", version)
 	downloadUrl := fmt.Sprintf(repo, version)
@@ -61,7 +67,12 @@ func DownloadImageFor(device ios.DeviceEntry, baseDir string) (string, error) {
 }
 
 func findImage(dir string, version string) (string, error) {
-	imageToFind := fmt.Sprintf("%s/%s", version, developerDiskImageDmg)
+	var imageToFind string
+        if runtime.GOOS == "windows" {
+	   imageToFind = fmt.Sprintf("%s\\%s", version, developerDiskImageDmg)
+        } else {
+	   imageToFind = fmt.Sprintf("%s/%s", version, developerDiskImageDmg)
+        }
 	var imageWeFound string
 	err := filepath.Walk(dir,
 		func(path string, info os.FileInfo, err error) error {
