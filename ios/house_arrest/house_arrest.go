@@ -82,7 +82,9 @@ type vendContainerResponse struct {
 }
 
 func (c Connection) Close() {
-	c.deviceConn.Close()
+	if c.deviceConn != nil {
+		c.deviceConn.Close()
+	}
 }
 
 func (conn *Connection) SendFile(fileContents []byte, filePath string) error {
