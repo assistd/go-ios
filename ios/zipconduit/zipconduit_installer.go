@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -65,7 +64,6 @@ func (conn Connection) SendFile(appFilePath string) error {
 	if err != nil {
 		return err
 	}
-
 	// Get the file information
 	info, err := openedFile.Stat()
 	openedFile.Close()
@@ -75,149 +73,57 @@ func (conn Connection) SendFile(appFilePath string) error {
 	if info.IsDir() {
 		return conn.sendDirectory(appFilePath)
 	}
-	return conn.sendIpaFile(appFilePath)
-}
 
-func (conn Connection) Close() error {
-	return conn.deviceConn.Close()
+	isCondZip, err := IsConduitZip(appFilePath)
+	if isCondZip {
+		return conn.InstallConduitApp(appFilePath)
+	}
+
+	return conn.InstallIpaApp(appFilePath)
 }
 
 func (conn Connection) sendDirectory(dir string) error {
-	tmpDir, err := ioutil.TempDir("", "prefix")
+	err := conn.initTransfer(dir + ".ipa")
 	if err != nil {
 		return err
 	}
-	log.Debugf("created tempdir: %s", tmpDir)
-	defer func() {
-		err := os.RemoveAll(tmpDir)
-		if err != nil {
-			log.WithFields(log.Fields{"dir": tmpDir}).Warn("failed removing tempdir")
-		}
-	}()
-	var totalBytes int64
-	var unzippedFiles []string
-	err = filepath.Walk(dir,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			totalBytes += info.Size()
-			unzippedFiles = append(unzippedFiles, path)
-			return nil
-		})
-	if err != nil {
-		return err
-	}
-
-	metainfFolder, metainfFile, err := addMetaInf(tmpDir, unzippedFiles, uint64(totalBytes))
-	if err != nil {
-		return err
-	}
-
-	init := newInitTransfer(dir + ".ipa")
-	log.Debugf("sending inittransfer %+v", init)
-	bytes, err := conn.plistCodec.Encode(init)
-	if err != nil {
-		return err
-	}
-
-	err = conn.deviceConn.Send(bytes)
-	if err != nil {
-		return err
-	}
-
 	deviceStream := conn.deviceConn.Writer()
-
-	log.Debug("writing meta inf")
-	err = AddFileToZip(deviceStream, metainfFolder, tmpDir)
+	err = packDirToConduitStream(dir, deviceStream)
 	if err != nil {
 		return err
 	}
-	err = AddFileToZip(deviceStream, metainfFile, tmpDir)
-	if err != nil {
-		return err
-	}
-	log.Debug("meta inf send successfully")
-
-	log.Debug("sending files....")
-
-	for _, file := range unzippedFiles {
-		err := AddFileToZip(deviceStream, file, dir)
-		if err != nil {
-			return err
-		}
-	}
-	log.Debug("files sent, sending central header....")
-	_, err = conn.deviceConn.Writer().Write(centralDirectoryHeader)
-	if err != nil {
-		return err
-	}
-
 	return conn.waitForInstallation()
-
 }
-func (conn Connection) sendIpaFile(ipaFile string) error {
-	tmpDir, err := ioutil.TempDir("", "prefix")
+
+func (conn Connection) InstallIpaApp(ipaApp string) error {
+	pwd, _ := os.Getwd()
+	tmpDir, err := ioutil.TempDir(pwd, "temp")
 	if err != nil {
 		return err
 	}
-	log.Debugf("created tempdir: %s", tmpDir)
+
 	defer func() {
 		err := os.RemoveAll(tmpDir)
 		if err != nil {
 			log.WithFields(log.Fields{"dir": tmpDir}).Warn("failed removing tempdir")
 		}
 	}()
-	log.Debug("unzipping..")
-	unzippedFiles, totalBytes, err := Unzip(ipaFile, tmpDir)
+
+	_, _, err = Unzip(ipaApp, tmpDir)
 	if err != nil {
 		return err
 	}
 
-	metainfFolder, metainfFile, err := addMetaInf(tmpDir, unzippedFiles, totalBytes)
-	if err != nil {
-		return err
-	}
-
-	init := newInitTransfer(ipaFile)
-	log.Debugf("sending inittransfer %+v", init)
-	bytes, err := conn.plistCodec.Encode(init)
-	if err != nil {
-		return err
-	}
-
-	err = conn.deviceConn.Send(bytes)
+	err = conn.initTransfer(ipaApp)
 	if err != nil {
 		return err
 	}
 
 	deviceStream := conn.deviceConn.Writer()
-
-	log.Debug("writing meta inf")
-	err = AddFileToZip(deviceStream, metainfFolder, tmpDir)
+	err = packDirToConduitStream(tmpDir, deviceStream)
 	if err != nil {
 		return err
 	}
-	err = AddFileToZip(deviceStream, metainfFile, tmpDir)
-	if err != nil {
-		return err
-	}
-	log.Debug("meta inf send successfully")
-
-	log.Debug("sending files....")
-
-	for _, file := range unzippedFiles {
-		err := AddFileToZip(deviceStream, file, tmpDir)
-		if err != nil {
-			return err
-		}
-	}
-	log.Debug("files sent, sending central header....")
-	_, err = conn.deviceConn.Writer().Write(centralDirectoryHeader)
-	if err != nil {
-		return err
-	}
-
 	return conn.waitForInstallation()
 }
 
@@ -287,7 +193,6 @@ func AddFileToZip(writer io.Writer, filename string, tmpdir string) error {
 			filenameForZip += "/"
 		}
 	}
-
 	if info.IsDir() {
 		//write our "zip" header for a directory
 		header, name, extra := newZipHeaderDir(filenameForZip)
@@ -322,6 +227,7 @@ func AddFileToZip(writer io.Writer, filename string, tmpdir string) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = io.Copy(writer, fileToZip)
 	return err
 }
@@ -332,4 +238,42 @@ func calculateCrc32(reader io.Reader) (uint32, error) {
 		return 0, err
 	}
 	return hash.Sum32(), nil
+}
+
+func (conn Connection) InstallConduitApp(conduitApp string) error {
+	reader, err := os.Open(conduitApp)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// skip header
+	header := &conduitZipHeader{}
+	err = binary.Read(reader, binary.BigEndian, header)
+	if err != nil {
+		return err
+	}
+
+	err = conn.initTransfer(conduitApp)
+	if err != nil {
+		return err
+	}
+	deviceStream := conn.deviceConn.Writer()
+	_, err = io.Copy(deviceStream, reader)
+	if err != nil {
+		return err
+	}
+	return conn.waitForInstallation()
+}
+
+func (conn Connection) initTransfer(ipaApp string) error {
+	init := newInitTransfer(ipaApp)
+	log.Debug("sending inittransfer %+v", init)
+	bytes, _ := conn.plistCodec.Encode(init)
+
+	err := conn.deviceConn.Send(bytes)
+	if err != nil {
+		return err
+	}
+	return nil
 }

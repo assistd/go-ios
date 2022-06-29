@@ -85,6 +85,7 @@ Usage:
   ios dproxy [--binary]
   ios readpair [options]
   ios pcap [options] [--pid=<processID>] [--process=<processName>]
+  ios convert --path=<ipaOrAppFolder> [options]
   ios install --path=<ipaOrAppFolder> [options]
   ios uninstall <bundleID> [options]
   ios apps [--system] [options]
@@ -162,6 +163,7 @@ The commands work as following:
    >                                                                  to stop usbmuxd and load to start it again should the proxy mess up things.
    >                                                                  The --binary flag will dump everything in raw binary without any decoding. 
    ios readpair                                                       Dump detailed information about the pairrecord for a device.
+   ios convert --path=<ipaOrAppFolder> [options]                      Convert ipa to conduit file.
    ios install --path=<ipaOrAppFolder> [options]                      Specify a .app folder or an installable ipa file that will be installed.  
    ios pcap [options] [--pid=<processID>] [--process=<processName>]   Starts a pcap dump of network traffic, use --pid or --process to filter specific processes.
    ios apps [--system]                                                Retrieves a list of installed applications. --system prints out preinstalled system apps.
@@ -230,6 +232,15 @@ The commands work as following:
 	if listCommand && !diagnosticsCommand && !imageCommand && !deviceStateCommand && !profileCommand {
 		b, _ = arguments.Bool("--details")
 		printDeviceList(b)
+		return
+	}
+
+	b, _ = arguments.Bool("convert")
+	if b {
+		ipa, _ := arguments.String("--path")
+		if _, err := zipconduit.ConvertIpaToConduitZip(ipa, "./"); err != nil {
+			log.Errorln("convert failed: ", err)
+		}
 		return
 	}
 
