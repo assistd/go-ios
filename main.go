@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios/afc"
 	"io/ioutil"
+	"path"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -50,6 +52,18 @@ func main() {
 
 const version = "local-build"
 
+func initLog() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetReportCaller(true)
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return "", fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	})
+	log.SetLevel(log.InfoLevel)
+}
+
 // Main Exports main for testing
 func Main() {
 	usage := fmt.Sprintf(`go-ios %s
@@ -57,7 +71,7 @@ func Main() {
 Usage:
   ios listen [options]
   ios list [options] [--details]
-  ios info [options]
+  ios info [--domain=<domain>] [--key=<key>] [options]
   ios image list [options]
   ios image mount [--path=<imagepath>] [options]
   ios image auto [--basedir=<where_dev_images_are_stored>] [options]
@@ -120,7 +134,7 @@ The commands work as following:
 
    ios listen [options]                                               Keeps a persistent connection open and notifies about newly connected or disconnected devices.
    ios list [options] [--details]                                     Prints a list of all connected device's udids. If --details is specified, it includes version, name and model of each device.
-   ios info [options]                                                 Prints a dump of Lockdown getValues.
+   ios info [--domain=<domain>] [--key=<key>] [options]               Prints a dump of Lockdown getValues.
    ios image list [options]                                           List currently mounted developers images' signatures
    ios image mount [--path=<imagepath>] [options]                     Mount a image from <imagepath>
    ios image auto [--basedir=<where_dev_images_are_stored>] [options] Automatically download correct dev image from the internets and mount it.
@@ -195,6 +209,8 @@ The commands work as following:
 	} else {
 		log.SetFormatter(&log.JSONFormatter{})
 	}
+
+	initLog()
 
 	traceLevelEnabled, _ := arguments.Bool("--trace")
 	if traceLevelEnabled {
@@ -383,7 +399,9 @@ The commands work as following:
 
 	b, _ = arguments.Bool("info")
 	if b {
-		printDeviceInfo(device)
+		domain, _ := arguments.String("--domain")
+		key, _ := arguments.String("--key")
+		printDeviceInfo(device, domain, key)
 		return
 	}
 
@@ -1207,8 +1225,8 @@ func startListening() {
 	<-c
 }
 
-func printDeviceInfo(device ios.DeviceEntry) {
-	allValues, err := ios.GetValuesPlist(device)
+func printDeviceInfo(device ios.DeviceEntry, domain, key string) {
+	allValues, err := ios.GetDomainValuesPlist(device, domain, key)
 	if err != nil {
 		exitIfError("failed getting info", err)
 	}
@@ -1272,7 +1290,7 @@ func readPair(device ios.DeviceEntry) {
 }
 
 func convertToJSONString(data interface{}) string {
-	b, err := json.Marshal(data)
+	b, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		fmt.Println(err)
 		return ""

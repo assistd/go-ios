@@ -289,3 +289,14 @@ func GetValues(device DeviceEntry) (GetAllValuesResponse, error) {
 	}
 	return allValues, nil
 }
+
+//GetDomainValuesPlist returns the domain info
+func GetDomainValuesPlist(device DeviceEntry, domain, key string) (interface{}, error) {
+	lockDownConn, err := ConnectLockdownWithSession(device)
+	if err != nil {
+		return struct{}{}, err
+	}
+	defer lockDownConn.Close()
+	resp, err := lockDownConn.GetValueForDomain(key, domain)
+	return resp, err
+}
