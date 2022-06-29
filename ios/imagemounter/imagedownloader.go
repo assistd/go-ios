@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const repo = "https://github.com/haikieu/xcode-developer-disk-image-all-platforms/raw/master/DiskImages/iPhoneOS.platform/DeviceSupport/%s.zip"
+const repo = "https://github.com/JinjunHan/iOSDeviceSupport/raw/master/DeviceSupport/%s.zip"
 const imagepath = "devimages"
 const developerDiskImageDmg = "DeveloperDiskImage.dmg"
 
@@ -63,9 +63,15 @@ func DownloadImageFor(device ios.DeviceEntry, baseDir string) (string, error) {
 		log.Infof("%s already downloaded from https://github.com/haikieu/", imageDownloaded)
 		return imageDownloaded, nil
 	}
+
+	subVersions := strings.Split(version, ".")
+	if len(subVersions) > 2 {
+		version = fmt.Sprintf("%v.%v", subVersions[0], subVersions[1])
+	}
+
 	downloadUrl := fmt.Sprintf(repo, version)
 	log.Infof("downloading from: %s", downloadUrl)
-	log.Info("thank you haikieu for making these images available :-)")
+	log.Info("thank you JinjunHan for making these images available :-)")
 	zipFileName := path.Join(baseDir, imagepath, fmt.Sprintf("%s.zip", version))
 	err = downloadFile(zipFileName, downloadUrl)
 	if err != nil {
