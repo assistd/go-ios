@@ -5,14 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios/afc"
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/danielpaulus/go-ios/ios/afc"
 
 	"github.com/danielpaulus/go-ios/ios/crashreport"
 	"github.com/danielpaulus/go-ios/ios/testmanagerd"
@@ -43,7 +45,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//JSONdisabled enables or disables output in JSON format
+// JSONdisabled enables or disables output in JSON format
 var JSONdisabled = false
 var prettyJSON = false
 
@@ -52,6 +54,18 @@ func main() {
 }
 
 const version = "local-build"
+
+func initLog() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetReportCaller(true)
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return "", fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	})
+	log.SetLevel(log.InfoLevel)
+}
 
 // Main Exports main for testing
 func Main() {
@@ -205,6 +219,8 @@ The commands work as following:
 	} else {
 		log.SetFormatter(&log.JSONFormatter{})
 	}
+
+	initLog()
 
 	pretty, _ := arguments.Bool("--pretty")
 	if pretty {
