@@ -2,6 +2,7 @@ package zipconduit
 
 import (
 	"archive/zip"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -16,17 +17,17 @@ import (
 //this is for a directory.
 func newZipHeaderDir(name string) (zipHeader, []byte, []byte) {
 	return zipHeader{
-		signature:              0x04034b50,
-		version:                20,
-		generalPurposeBitFlags: 0,
-		compressionMethod:      0,
-		lastModifiedTime:       0xBDEF,
-		lastModifiedDate:       0x52EC,
-		crc32:                  0,
-		compressedSize:         0,
-		uncompressedSize:       0,
-		fileNameLength:         uint16(len(name)),
-		extraFieldLength:       32,
+		Signature:              0x04034b50,
+		Version:                20,
+		GeneralPurposeBitFlags: 0,
+		CompressionMethod:      0,
+		LastModifiedTime:       0xBDEF,
+		LastModifiedDate:       0x52EC,
+		Crc32:                  0,
+		CompressedSize:         0,
+		UncompressedSize:       0,
+		FileNameLength:         uint16(len(name)),
+		ExtraFieldLength:       32,
 	}, []byte(name), zipExtraBytes
 }
 
@@ -38,17 +39,17 @@ func newZipHeader(size uint32, crc32 uint32, name string) (zipHeader, []byte, []
 	//since we only want to get files to a device so it can install an app
 	//timestamps and all that don't really matter anyway
 	return zipHeader{
-		signature:              0x04034b50,
-		version:                20,
-		generalPurposeBitFlags: 0,
-		compressionMethod:      0,
-		lastModifiedTime:       0xBDEF,
-		lastModifiedDate:       0x52EC,
-		crc32:                  crc32,
-		compressedSize:         size,
-		uncompressedSize:       size,
-		fileNameLength:         uint16(len(name)),
-		extraFieldLength:       32,
+		Signature:              0x04034b50,
+		Version:                20,
+		GeneralPurposeBitFlags: 0,
+		CompressionMethod:      0,
+		LastModifiedTime:       0xBDEF,
+		LastModifiedDate:       0x52EC,
+		Crc32:                  crc32,
+		CompressedSize:         size,
+		UncompressedSize:       size,
+		FileNameLength:         uint16(len(name)),
+		ExtraFieldLength:       32,
 	}, []byte(name), zipExtraBytes
 }
 
@@ -78,17 +79,17 @@ func init(){
 //zipHeader is pretty much the structure of a standard zip file header as can be found
 //here f.ex. https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
 type zipHeader struct {
-	signature              uint32
-	version                uint16
-	generalPurposeBitFlags uint16
-	compressionMethod      uint16
-	lastModifiedTime       uint16
-	lastModifiedDate       uint16
-	crc32                  uint32
-	compressedSize         uint32
-	uncompressedSize       uint32
-	fileNameLength         uint16
-	extraFieldLength       uint16
+	Signature              uint32
+	Version                uint16
+	GeneralPurposeBitFlags uint16
+	CompressionMethod uint16
+	LastModifiedTime uint16
+	LastModifiedDate uint16
+	Crc32            uint32
+	CompressedSize   uint32
+	UncompressedSize uint32
+	FileNameLength   uint16
+	ExtraFieldLength uint16
 }
 
 //standard header signature for central directory of a zip file
@@ -151,4 +152,117 @@ func Unzip(src string, dest string) ([]string, uint64, error) {
 		}
 	}
 	return filenames, overallSize, nil
+}
+
+func readZipEntry(reader io.Reader) (*zipHeader, []byte, error) {
+	header := &zipHeader{}
+	err := binary.Read(reader, binary.LittleEndian, header)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	name := make([]byte, header.FileNameLength)
+	err = binary.Read(reader, binary.BigEndian, name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	extra := make([]byte, header.ExtraFieldLength)
+	err = binary.Read(reader, binary.BigEndian, extra)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return header, name, nil
+}
+
+type WzipEntry struct {
+	Name string
+	Offset int64
+	Length uint32
+}
+
+type WzipInfo struct {
+	Entries []*WzipEntry
+}
+
+func GetZipInfo(src string) (*WzipInfo, error) {
+	reader, err := os.Open(src)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	fileInfo, _ := os.Stat(src)
+	totalSize := fileInfo.Size()
+
+	magicHeader := &conduitZipHeader{}
+	err = binary.Read(reader, binary.BigEndian, magicHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &WzipInfo{
+		Entries: make([]*WzipEntry, 0),
+	}
+
+	for {
+		header, name, err := readZipEntry(reader)
+		if err != nil {
+			return info, err
+		}
+
+		off, _ := reader.Seek(0, 1)
+		entry := &WzipEntry{
+			Name: string(name),
+			Offset: off,
+			Length: header.CompressedSize,
+		}
+
+		info.Entries = append(info.Entries, entry)
+		if header.CompressedSize != 0 {
+			_, err := reader.Seek(int64(header.CompressedSize), 1)
+			if err != nil {
+				return info, err
+			}
+		}
+
+		noff := off + int64(header.CompressedSize) + int64(len(centralDirectoryHeader))
+		if noff == totalSize {
+			return info, nil
+		}
+	}
+}
+
+// ExtractFile extract specific regular file from conduit file
+func ExtractFile(file string, item string) error {
+	//FIXME: only support extract regular file, Directory is not supported at now
+	info, err := GetZipInfo(file)
+	if err != nil {
+		log.Errorln("get conduit info error: ", err)
+	}
+
+	reader, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	writer, err := os.Create(item)
+	if err != nil {
+		return err
+	}
+
+	defer writer.Close()
+	if info != nil {
+		for _, entry := range info.Entries {
+			if strings.HasSuffix(entry.Name, item) {
+				_, _ = reader.Seek(entry.Offset, 0)
+				_, err := io.CopyN(writer, reader, int64(entry.Length))
+				return err
+			}
+		}
+	}
+	log.Fatalf("could not extract %v: not found", item)
+	return err
 }
