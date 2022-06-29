@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -119,13 +120,16 @@ func ConvertIpaToConduitZip(ipaApp string, outDir string) (string, error) {
 func packDirToConduitStream(dir string, stream io.Writer) error {
 	var totalBytes int64
 	var unzippedFiles []string
+	metainfPath := path.Join(dir, "META-INF")
 	err := filepath.Walk(dir,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			totalBytes += info.Size()
-			unzippedFiles = append(unzippedFiles, path)
+			if dir != path  && !strings.HasPrefix(path, metainfPath) {
+				totalBytes += info.Size()
+				unzippedFiles = append(unzippedFiles, path)
+			}
 			return nil
 		})
 	if err != nil {
@@ -134,14 +138,6 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 	metainfFolder, metainfFile, err := addMetaInf(dir, unzippedFiles, uint64(totalBytes))
 	if err != nil {
 		return err
-	}
-
-	header := newHeader()
-	header.fillChecksum()
-	log.Debug("writing header")
-	_, err = stream.Write(header.bytes())
-	if err != nil {
-		return nil
 	}
 
 	log.Debug("writing meta inf")
@@ -167,4 +163,16 @@ func packDirToConduitStream(dir string, stream io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func PackDirToConduitStream(dir string, stream io.Writer) error {
+	header := newHeader()
+	header.fillChecksum()
+	log.Debug("writing header")
+	_, err := stream.Write(header.bytes())
+	if err != nil {
+		return nil
+	}
+
+	return packDirToConduitStream(dir, stream)
 }

@@ -86,6 +86,8 @@ Usage:
   ios readpair [options]
   ios pcap [options] [--pid=<processID>] [--process=<processName>]
   ios convert --path=<ipaOrAppFolder> [options]
+  ios winfo --path=<test.wzip> [options]
+  ios wextract --path=<test.wzip> --item=<file> [options]
   ios install --path=<ipaOrAppFolder> [options]
   ios uninstall <bundleID> [options]
   ios apps [--system] [options]
@@ -237,9 +239,58 @@ The commands work as following:
 
 	b, _ = arguments.Bool("convert")
 	if b {
-		ipa, _ := arguments.String("--path")
-		if _, err := zipconduit.ConvertIpaToConduitZip(ipa, "./"); err != nil {
+		p, _ := arguments.String("--path")
+
+		f, err := os.Stat(p)
+		if err != nil {
 			log.Errorln("convert failed: ", err)
+			return
+		}
+
+		if f.IsDir() {
+			out, err := os.Create("out.wzip")
+			if err != nil {
+				log.Errorln("create out file failed: ", err)
+				return
+			}
+			defer out.Close()
+			if err := zipconduit.PackDirToConduitStream(p, out); err != nil {
+				log.Errorln("convert failed: ", err)
+			}
+		} else {
+			if _, err := zipconduit.ConvertIpaToConduitZip(p, "./"); err != nil {
+				log.Errorln("convert failed: ", err)
+			}
+		}
+		return
+	}
+
+	b, _ = arguments.Bool("winfo")
+	if b {
+		wzip, _ := arguments.String("--path")
+		info, err := zipconduit.GetZipInfo(wzip)
+
+		if info != nil {
+			for _, entry := range info.Entries {
+				fmt.Printf("name:%v off:%v len:%v\n", entry.Name, entry.Offset, entry.Length)
+			}
+		}
+
+		if err != nil {
+			log.Fatal("get wzip info error:", err)
+		}
+		return
+	}
+
+	b, _ = arguments.Bool("wextract")
+	if b {
+		wzip, _ := arguments.String("--path")
+		item, _ := arguments.String("--item")
+		err := zipconduit.ExtractFile(wzip, item)
+		if err != nil {
+			log.Fatal("get wzip info error:", err)
+		} else {
+			fmt.Printf("extract %v successfully\n", item)
 		}
 		return
 	}
