@@ -3,12 +3,13 @@ package imagemounter
 import (
 	"errors"
 	"fmt"
-	"github.com/Masterminds/semver"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/Masterminds/semver"
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
 )
 
 const serviceName string = "com.apple.mobile.mobile_image_mounter"
@@ -245,41 +246,60 @@ func (conn *Connection) hangUp() error {
 // looks for the image for the device version in baseDir. If it is not present it will download it from
 // github and install.
 func FixDevImage(device ios.DeviceEntry, baseDir string) error {
-	conn, err := New(device)
-	if err != nil {
-		return fmt.Errorf("failed connecting to image mounter: %v", err)
-	}
-	signatures, err := conn.ListImages()
-	if err != nil {
-		return fmt.Errorf("failed getting image list: %v", err)
-	}
-
-	if len(signatures) != 0 {
+	b, err := IsImageMount(device)
+	if b {
 		log.Warn("there is already a developer image mounted, reboot the device if you want to remove it. aborting.")
 		return nil
 	}
+	if err != nil {
+		return err
+	}
+
 	imagePath, err := DownloadImageFor(device, baseDir)
 	if err != nil {
 		return fmt.Errorf("failed downloading image: %v", err)
 	}
 
 	log.Infof("installing downloaded image '%s'", imagePath)
-	return MountImage(device, imagePath)
-}
 
-func MountImage(device ios.DeviceEntry, path string) error {
+	// 重复执行IsImageMount会导致mount卡主
 	conn, err := New(device)
 	if err != nil {
 		return fmt.Errorf("failed connecting to image mounter: %v", err)
 	}
+	return conn.MountImage(imagePath)
+}
 
-	signatures, err := conn.ListImages()
-	if err != nil {
-		return fmt.Errorf("failed getting image list: %v", err)
-	}
-	if len(signatures) != 0 {
+func MountImage(device ios.DeviceEntry, path string) error {
+	b, err := IsImageMount(device)
+	if b {
 		log.Warn("there is already a developer image mounted, reboot the device if you want to remove it. aborting.")
 		return nil
 	}
+	if err != nil {
+		return err
+	}
+
+	conn, err := New(device)
+	if err != nil {
+		return fmt.Errorf("failed connecting to image mounter: %v", err)
+	}
 	return conn.MountImage(path)
+}
+
+func IsImageMount(device ios.DeviceEntry) (bool, error) {
+	conn, err := New(device)
+	if err != nil {
+		return false, fmt.Errorf("imagemount: failed connecting to image mounter: %v", err)
+	}
+	signatures, err := conn.ListImages()
+	if err != nil {
+		return false, fmt.Errorf("imagemount: failed getting image list: %v", err)
+	}
+
+	if len(signatures) != 0 {
+		return true, nil
+	}
+
+	return false, nil
 }
