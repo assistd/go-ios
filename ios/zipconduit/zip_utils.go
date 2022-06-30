@@ -5,11 +5,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 //sadly apple does not use a standard compliant zip implementation for this
@@ -53,10 +54,10 @@ func newZipHeader(size uint32, crc32 uint32, name string) (zipHeader, []byte, []
 	}, []byte(name), zipExtraBytes
 }
 
-
 //will be set by init()
 var zipExtraBytes []byte
-func init(){
+
+func init() {
 	/**
 	Zip files can carry extra data in their file header fields.
 	Those are usually things like timestamps or some unix permissions we don't really care about.
@@ -65,12 +66,12 @@ func init(){
 	Since we only push data to the device and don't really care about correct timestamps or anything like that,
 	I just dumped what XCode generates and always send the same extra.
 	In this case I took a 0x5455 "UT" extra. Should it ever break, it'll be easy to fix.
-	 */
+	*/
 	s := "55540D00 07F3A2EC 60F6A2EC 60F3A2EC 6075780B 000104F5 01000004 14000000"
 	s = strings.ReplaceAll(s, " ", "")
 
 	extra, err := hex.DecodeString(s)
-    zipExtraBytes = extra
+	zipExtraBytes = extra
 	if err != nil {
 		log.Fatal("this is impossible to break", err)
 	}
@@ -82,14 +83,14 @@ type zipHeader struct {
 	Signature              uint32
 	Version                uint16
 	GeneralPurposeBitFlags uint16
-	CompressionMethod uint16
-	LastModifiedTime uint16
-	LastModifiedDate uint16
-	Crc32            uint32
-	CompressedSize   uint32
-	UncompressedSize uint32
-	FileNameLength   uint16
-	ExtraFieldLength uint16
+	CompressionMethod      uint16
+	LastModifiedTime       uint16
+	LastModifiedDate       uint16
+	Crc32                  uint32
+	CompressedSize         uint32
+	UncompressedSize       uint32
+	FileNameLength         uint16
+	ExtraFieldLength       uint16
 }
 
 //standard header signature for central directory of a zip file
@@ -144,6 +145,7 @@ func Unzip(src string, dest string) ([]string, uint64, error) {
 		//sizeStat, err := outFile.Stat()
 		overallSize += f.UncompressedSize64
 		// Close the file without defer to close before next iteration of loop
+
 		outFile.Close()
 		rc.Close()
 
@@ -177,7 +179,7 @@ func readZipEntry(reader io.Reader) (*zipHeader, []byte, error) {
 }
 
 type WzipEntry struct {
-	Name string
+	Name   string
 	Offset int64
 	Length uint32
 }
@@ -214,7 +216,7 @@ func GetZipInfo(src string) (*WzipInfo, error) {
 
 		off, _ := reader.Seek(0, 1)
 		entry := &WzipEntry{
-			Name: string(name),
+			Name:   string(name),
 			Offset: off,
 			Length: header.CompressedSize,
 		}
