@@ -31,13 +31,13 @@ func DownloadReports(device ios.DeviceEntry, pattern string, targetdir string) e
 	return copyReports(afc, ".", pattern, targetdir)
 }
 
-func copyReports(afc *afc.Connection, cwd string, pattern string, targetDir string) error {
+func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir string) error {
 	log.WithFields(log.Fields{"dir": cwd, "pattern": pattern, "to": targetDir}).Info("downloading")
 	targetDirInfo, err := os.Stat(targetDir)
 	if err != nil {
 		return err
 	}
-	files, err := afc.ListFiles(cwd, pattern)
+	files, err := conn.ListFiles(cwd, pattern)
 	if err != nil {
 		return err
 	}
@@ -50,26 +50,29 @@ func copyReports(afc *afc.Connection, cwd string, pattern string, targetDir stri
 		devicePath := path.Join(cwd, f)
 		targetFilePath := path.Join(targetDir, f)
 		log.WithFields(log.Fields{"from": devicePath, "to": targetFilePath}).Info("downloading")
-		info, err := afc.Stat(devicePath)
+		info, err := conn.Stat(devicePath)
 		if err != nil {
 			log.Warnf("failed getting info for file: %s, skipping", f)
 			continue
 		}
 		log.Debugf("%+v", info)
 
-		if info.IsDir(){
+		if info.IsDir() {
 			err := os.Mkdir(targetFilePath, targetDirInfo.Mode().Perm())
 			if err != nil {
 				return err
 			}
-			err = copyReports(afc, devicePath, "*", targetFilePath)
+			err = copyReports(conn, devicePath, "*", targetFilePath)
 			if err != nil {
 				return err
 			}
 			continue
 		}
 
-		err = afc.PullSingleFile(devicePath, targetFilePath)
+		fsync := &afc.Fsync{
+			Connection: conn,
+		}
+		err = fsync.PullFile(devicePath, targetFilePath)
 		if err != nil {
 			return err
 		}
@@ -101,7 +104,7 @@ func RemoveReports(device ios.DeviceEntry, cwd string, pattern string) error {
 			continue
 		}
 		log.WithFields(log.Fields{"path": path.Join(cwd, f)}).Info("delete")
-		err := afc.Remove(path.Join(cwd, f))
+		err := afc.RemovePath(path.Join(cwd, f))
 		if err != nil {
 			return err
 		}

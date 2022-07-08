@@ -101,8 +101,7 @@ Usage:
   ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--arg=<a>]... [--env=<e>]... [options]
   ios ax [options]
   ios debug [options] [--stop-at-entry] <app_path>
-  ios fsync (rm | tree | mkdir) --path=<targetPath>
-  ios fsync (pull | push) --srcPath=<srcPath> --dstPath=<dstPath> 
+  ios fsync (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
   ios reboot [options]
   ios -h | --help
   ios --version | version [options]
@@ -186,8 +185,8 @@ The commands work as following:
    >                                                                  specify runtime args and env vars like --env ENV_1=something --env ENV_2=else  and --arg ARG1 --arg ARG2
    ios ax [options]                                                   Access accessibility inspector features. 
    ios debug [--stop-at-entry] <app_path>                             Start debug with lldb
-   ios fsync (rm | tree | mkdir) --path=<targetPath>                  Remove | treeview | mkdir in target path.
-   ios fsync (pull | push) --srcPath=<srcPath> --dstPath=<dstPath>    Pull or Push file from srcPath to dstPath.
+   ios fsync (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
+   > app file management
    ios reboot [options]                                               Reboot the given device
    ios -h | --help                                                    Prints this screen.
    ios --version | version [options]                                  Prints the version
@@ -697,11 +696,51 @@ The commands work as following:
 	if b {
 		afcService, err := afc.New(device)
 		exitIfError("fsync: connect afc service failed", err)
+
+		b, _ = arguments.Bool("ls")
+		if b {
+			path, _ := arguments.String("--path")
+			files, err := afcService.ReadDir(path)
+			exitIfError("fsync: ls failed", err)
+			for _, f := range files {
+				info, err := afcService.Stat(path + "/" + f)
+				if err != nil {
+					log.Errorf("stat %v error: %v", f, err)
+					continue
+				}
+				if info.IsDir() {
+					fmt.Println(f + "/")
+				} else {
+					fmt.Printf("- %v %v %v\n",
+						info.Name(), info.ModTime().Format("2006-01-02 15:04:05"), info.Size())
+				}
+			}
+			return
+		}
+
 		b, _ = arguments.Bool("rm")
 		if b {
 			path, _ := arguments.String("--path")
-			err = afcService.Remove(path)
+			err = afcService.RemovePath(path)
 			exitIfError("fsync: remove failed", err)
+			return
+		}
+
+		b, _ = arguments.Bool("stat")
+		if b {
+			path, _ := arguments.String("--path")
+			info, err := afcService.Stat(path)
+			exitIfError("fsync: stat failed", err)
+			fmt.Printf("IFMT: ")
+			if info.IsDir() {
+				fmt.Println("DIR")
+			} else {
+				fmt.Println("FILE")
+			}
+			fmt.Println("CTime:", info.CTime().Format("2006-01-02 15:04:05"))
+			fmt.Println("MTime:", info.ModTime().Format("2006-01-02 15:04:05"))
+			fmt.Println("Size:", info.Size())
+			return
 		}
 
 		b, _ = arguments.Bool("tree")
@@ -709,19 +748,21 @@ The commands work as following:
 			path, _ := arguments.String("--path")
 			err = afcService.TreeView(path, "", true)
 			exitIfError("fsync: tree view failed", err)
+			return
 		}
 
 		b, _ = arguments.Bool("mkdir")
 		if b {
 			path, _ := arguments.String("--path")
-			err = afcService.MkDir(path)
+			err = afcService.Mkdir(path)
 			exitIfError("fsync: mkdir failed", err)
+			return
 		}
 
 		b, _ = arguments.Bool("pull")
 		if b {
-			sp, _ := arguments.String("--srcPath")
-			dp, _ := arguments.String("--dstPath")
+			sp, _ := arguments.String("--src")
+			dp, _ := arguments.String("--dst")
 			if dp != "" {
 				ret, _ := ios.PathExists(dp)
 				if !ret {
@@ -732,11 +773,13 @@ The commands work as following:
 			dp = path.Join(dp, filepath.Base(sp))
 			err = afcService.Pull(sp, dp)
 			exitIfError("fsync: pull failed", err)
+			return
 		}
+
 		b, _ = arguments.Bool("push")
 		if b {
-			sp, _ := arguments.String("--srcPath")
-			dp, _ := arguments.String("--dstPath")
+			sp, _ := arguments.String("--src")
+			dp, _ := arguments.String("--dst")
 			err = afcService.Push(sp, dp)
 			exitIfError("fsync: push failed", err)
 		}

@@ -8,28 +8,67 @@ import (
 )
 
 const (
-	Afc_magic                      uint64 = 0x4141504c36414643
-	Afc_header_size                uint64 = 40
-	Afc_operation_status           uint64 = 0x00000001
-	Afc_operation_data             uint64 = 0x00000002
-	Afc_operation_read_dir         uint64 = 0x00000003
-	Afc_operation_remove_path      uint64 = 0x00000008
-	Afc_operation_make_dir         uint64 = 0x00000009
-	Afc_operation_file_info        uint64 = 0x0000000A
-	Afc_operation_file_open        uint64 = 0x0000000D
-	Afc_operation_file_close       uint64 = 0x00000014
-	Afc_operation_file_write       uint64 = 0x00000010
-	Afc_operation_file_open_result uint64 = 0x0000000E
-	Afc_operation_file_read        uint64 = 0x0000000F
+	Afc_magic       uint64 = 0x4141504c36414643
+	Afc_header_size uint64 = 40
+
+	Afc_operation_status              uint64 = 0x00000001
+	Afc_operation_data                uint64 = 0x00000002 // Data
+	Afc_operation_read_dir            uint64 = 0x00000003 // ReadDir
+	Afc_operation_READ_FILE           uint64 = 0x00000004 // ReadFile
+	Afc_operation_WRITE_FILE          uint64 = 0x00000005 // WriteFile
+	Afc_operation_WRITE_PART          uint64 = 0x00000006 // WritePart
+	Afc_operation_TRUNCATE            uint64 = 0x00000007 // TruncateFile
+	Afc_operation_remove_path         uint64 = 0x00000008 // RemovePath
+	Afc_operation_make_dir            uint64 = 0x00000009 // MakeDir
+	Afc_operation_file_info           uint64 = 0x0000000A // GetFileInfo
+	Afc_operation_get_devinfo         uint64 = 0x0000000B // GetDeviceInfo
+	Afc_operation_write_file_atom     uint64 = 0x0000000C // WriteFileAtomic (tmp file+rename)
+	Afc_operation_file_open           uint64 = 0x0000000D // FileRefOpen
+	Afc_operation_file_open_result    uint64 = 0x0000000E // FileRefOpenResult
+	Afc_operation_file_read           uint64 = 0x0000000F // FileRefRead
+	Afc_operation_file_write          uint64 = 0x00000010 // FileRefWrite
+	Afc_operation_file_seek           uint64 = 0x00000011 // FileRefSeek
+	Afc_operation_file_tell           uint64 = 0x00000012 // FileRefTell
+	Afc_operation_file_tell_result    uint64 = 0x00000013 // FileRefTellResult
+	Afc_operation_file_close          uint64 = 0x00000014 // FileRefClose
+	Afc_operation_file_set_size       uint64 = 0x00000015 // FileRefSetFileSize(ftruncate)
+	Afc_operation_get_con_info        uint64 = 0x00000016 // GetConnectionInfo
+	Afc_operation_set_conn_options    uint64 = 0x00000017 // SetConnectionOptions
+	Afc_operation_rename_path         uint64 = 0x00000018 // RenamePath
+	Afc_operation_set_fs_bs           uint64 = 0x00000019 // SetFSBlockSize (0x800000)
+	Afc_operation_set_socket_bs       uint64 = 0x0000001A // SetSocketBlockSize
+	Afc_operation_file_lock           uint64 = 0x0000001B // FileRefLock
+	Afc_operation_make_link           uint64 = 0x0000001C // MakeLink
+	Afc_operation_set_file_time       uint64 = 0x0000001E // set st_mtime
+	Afc_operation_get_file_Hash_range uint64 = 0x0000001F // GetFileHashWithRange
+
+	/* iOS 6+ */
+	AFC_OP_FILE_SET_IMMUTABLE_HINT   = 0x00000020 /* FileRefSetImmutableHint */
+	AFC_OP_GET_SIZE_OF_PATH_CONTENTS = 0x00000021 /* GetSizeOfPathContents */
+	AFC_OP_REMOVE_PATH_AND_CONTENTS  = 0x00000022 /* RemovePathAndContents */
+	AFC_OP_DIR_OPEN                  = 0x00000023 /* DirectoryEnumeratorRefOpen */
+	AFC_OP_DIR_OPEN_RESULT           = 0x00000024 /* DirectoryEnumeratorRefOpenResult */
+	AFC_OP_DIR_READ                  = 0x00000025 /* DirectoryEnumeratorRefRead */
+	AFC_OP_DIR_CLOSE                 = 0x00000026 /* DirectoryEnumeratorRefClose */
+	/* iOS 7+ */
+	AFC_OP_FILE_READ_OFFSET  = 0x00000027 /* FileRefReadWithOffset */
+	AFC_OP_FILE_WRITE_OFFSET = 0x00000028 /* FileRefWriteWithOffset */
+)
+
+type LinkType int
+
+const (
+	AFC_HARDLINK LinkType = 1
+	AFC_SYMLINK  LinkType = 2
 )
 
 const (
-	Afc_Mode_RDONLY   uint64 = 0x00000001
-	Afc_Mode_RW       uint64 = 0x00000002
-	Afc_Mode_WRONLY   uint64 = 0x00000003
-	Afc_Mode_WR       uint64 = 0x00000004
-	Afc_Mode_APPEND   uint64 = 0x00000005
-	Afc_Mode_RDAPPEND uint64 = 0x00000006
+	Afc_Mode_RDONLY   uint64 = 0x00000001 // r,  O_RDONLY
+	Afc_Mode_RW       uint64 = 0x00000002 // r+, O_RDWR   | O_CREAT
+	Afc_Mode_WRONLY   uint64 = 0x00000003 // w,  O_WRONLY | O_CREAT  | O_TRUNC
+	Afc_Mode_WR       uint64 = 0x00000004 // w+, O_RDWR   | O_CREAT  | O_TRUNC
+	Afc_Mode_APPEND   uint64 = 0x00000005 // a,  O_WRONLY | O_APPEND | O_CREAT
+	Afc_Mode_RDAPPEND uint64 = 0x00000006 // a+, O_RDWR   | O_APPEND | O_CREAT
 )
 
 const (
