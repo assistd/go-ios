@@ -60,8 +60,14 @@ func (conn *Connection) sendAfcPacketAndAwaitResponse(packet AfcPacket) (AfcPack
 	return Decode(conn.deviceConn.Reader())
 }
 
-func (conn *Connection) checkOperationStatus(status uint64) bool {
-	return status == Afc_operation_status || status == Afc_operation_data || status == Afc_operation_file_close || status == Afc_operation_file_open_result
+func (conn *Connection) checkOperationStatus(packet AfcPacket) error {
+	if packet.Header.Operation == Afc_operation_status {
+		errorCode := binary.LittleEndian.Uint64(packet.HeaderPayload)
+		if errorCode != Afc_Err_Success {
+			return getError(errorCode)
+		}
+	}
+	return nil
 }
 
 func (conn *Connection) Remove(path string) error {
@@ -76,8 +82,8 @@ func (conn *Connection) Remove(path string) error {
 	if err != nil {
 		return err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return fmt.Errorf("remove: unexpected afc status: %v", err)
 	}
 	return nil
 }
@@ -94,8 +100,8 @@ func (conn *Connection) MkDir(path string) error {
 	if err != nil {
 		return err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return fmt.Errorf("mkdir: unexpected afc status: %v", err)
 	}
 	return nil
 }
@@ -112,8 +118,8 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return nil, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return nil, fmt.Errorf("stat: unexpected afc status: %v", err)
 	}
 	ret := bytes.Split(response.Payload, []byte{0})
 	retLen := len(ret)
@@ -150,8 +156,8 @@ func (conn *Connection) listDir(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return nil, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return nil, fmt.Errorf("list dir: unexpected afc status: %v", err)
 	}
 	ret := bytes.Split(response.Payload, []byte{0})
 	var fileList []string
@@ -248,8 +254,8 @@ func (conn *Connection) openFile(path string, mode uint64) (byte, error) {
 	if err != nil {
 		return 0, err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return 0, fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return 0, fmt.Errorf("open file: unexpected afc status: %v", err)
 	}
 	return response.HeaderPayload[0], nil
 }
@@ -265,8 +271,8 @@ func (conn *Connection) closeFile(handle byte) error {
 	if err != nil {
 		return err
 	}
-	if !conn.checkOperationStatus(response.Header.Operation) {
-		return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+	if err = conn.checkOperationStatus(response); err != nil {
+		return fmt.Errorf("close file: unexpected afc status: %v", err)
 	}
 	return nil
 }
@@ -305,8 +311,8 @@ func (conn *Connection) PullSingleFile(srcPath, dstPath string) error {
 		if err != nil {
 			return err
 		}
-		if !conn.checkOperationStatus(response.Header.Operation) {
-			return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+		if err = conn.checkOperationStatus(response); err != nil {
+			return fmt.Errorf("read file: unexpected afc status: %v", err)
 		}
 		leftSize = leftSize - int64(len(response.Payload))
 		f.Write(response.Payload)
@@ -390,8 +396,8 @@ func (conn *Connection) Push(srcPath, dstPath string) error {
 		if err != nil {
 			return err
 		}
-		if !conn.checkOperationStatus(response.Header.Operation) {
-			return fmt.Errorf("Unexpected afc response, expected %x received %x", Afc_operation_status, response.Header.Operation)
+		if err = conn.checkOperationStatus(response); err != nil {
+			return fmt.Errorf("write file: unexpected afc status: %v", err)
 		}
 	}
 	return nil
