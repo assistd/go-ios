@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const serviceName = "com.apple.afc"
@@ -22,6 +23,7 @@ type Connection struct {
 }
 
 type statInfo struct {
+	name         string
 	stSize       int64
 	stBlocks     int64
 	stCtime      int64
@@ -29,6 +31,33 @@ type statInfo struct {
 	stNlink      string
 	stIfmt       string
 	stLinktarget string
+}
+
+func (s *statInfo) Name() string {
+	return s.name
+}
+
+func (s *statInfo) Size() int64 {
+	return s.stSize
+}
+
+func (s *statInfo) Mode() os.FileMode {
+	if s.stIfmt == "S_IFDIR" {
+		return os.ModeDir
+	}
+	return 0
+}
+
+func (s *statInfo) CTime() time.Time {
+	return time.UnixMicro(s.stCtime / 1000)
+}
+
+func (s *statInfo) ModTime() time.Time {
+	return time.UnixMicro(s.stMtime / 1000)
+}
+
+func (s *statInfo) Sys() interface{} {
+	return s
 }
 
 func (s *statInfo) IsDir() bool {
@@ -88,7 +117,7 @@ func (conn *Connection) Remove(path string) error {
 	return nil
 }
 
-func (conn *Connection) MkDir(path string) error {
+func (conn *Connection) Mkdir(path string) error {
 	headerPayload := []byte(path)
 	headerLength := uint64(len(headerPayload))
 	thisLength := Afc_header_size + headerLength
@@ -107,6 +136,8 @@ func (conn *Connection) MkDir(path string) error {
 }
 
 func (conn *Connection) Stat(path string) (*statInfo, error) {
+	//os.Stat()
+	//os.ReadDir()
 	headerPayload := []byte(path)
 	headerLength := uint64(len(headerPayload))
 	thisLength := Afc_header_size + headerLength
@@ -134,6 +165,7 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 	}
 
 	var si statInfo
+	si.name = filepath.Base(path)
 	si.stSize, _ = strconv.ParseInt(statInfoMap["st_size"], 10, 64)
 	si.stBlocks, _ = strconv.ParseInt(statInfoMap["st_blocks"], 10, 64)
 	si.stCtime, _ = strconv.ParseInt(statInfoMap["st_birthtime"], 10, 64)
@@ -144,7 +176,7 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 	return &si, nil
 }
 
-func (conn *Connection) listDir(path string) ([]string, error) {
+func (conn *Connection) ListDir(path string) ([]string, error) {
 	headerPayload := []byte(path)
 	headerLength := uint64(len(headerPayload))
 	thisLength := Afc_header_size + headerLength
@@ -214,7 +246,7 @@ func (conn *Connection) TreeView(dpath string, prefix string, treePoint bool) er
 	tPrefix := prefix + namePrefix
 	if fileInfo.IsDir() {
 		fmt.Printf("%s %s/\n", tPrefix, filepath.Base(dpath))
-		fileList, err := conn.listDir(dpath)
+		fileList, err := conn.ListDir(dpath)
 		if err != nil {
 			return err
 		}
@@ -333,7 +365,7 @@ func (conn *Connection) Pull(srcPath, dstPath string) error {
 				return err
 			}
 		}
-		fileList, err := conn.listDir(srcPath)
+		fileList, err := conn.ListDir(srcPath)
 		if err != nil {
 			return err
 		}

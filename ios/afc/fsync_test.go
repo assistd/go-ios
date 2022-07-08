@@ -32,7 +32,7 @@ func TestConnection_Mkdir(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	err = conn.MkDir("/DCIM/TestDir")
+	err = conn.Mkdir("/DCIM/TestDir")
 	if err != nil {
 		log.Fatalf("mkdir failed:%v", err)
 	}
@@ -61,7 +61,7 @@ func TestConnection_listDir(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	flist, err := conn.listDir("/DCIM/")
+	flist, err := conn.ListDir("/DCIM/")
 	if err != nil {
 		log.Fatalf("tree view failed:%v", err)
 	}
