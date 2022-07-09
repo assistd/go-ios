@@ -239,7 +239,7 @@ func (conn *Connection) TreeView(dpath string, prefix string, treePoint bool) er
 	return nil
 }
 
-func (conn *Connection) openFile(path string, mode uint64) (byte, error) {
+func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
 	pathBytes := []byte(path)
 	headerLength := 8 + uint64(len(pathBytes))
 	headerPayload := make([]byte, headerLength)
@@ -257,12 +257,17 @@ func (conn *Connection) openFile(path string, mode uint64) (byte, error) {
 	if err = conn.checkOperationStatus(response); err != nil {
 		return 0, fmt.Errorf("open file: unexpected afc status: %v", err)
 	}
-	return response.HeaderPayload[0], nil
+	fd := binary.LittleEndian.Uint64(response.HeaderPayload)
+	if fd == 0 {
+		return 0, fmt.Errorf("file descriptor should not be zero")
+	}
+
+	return fd, nil
 }
 
-func (conn *Connection) closeFile(handle byte) error {
+func (conn *Connection) CloseFile(fd uint64) error {
 	headerPayload := make([]byte, 8)
-	headerPayload[0] = handle
+	binary.LittleEndian.PutUint64(headerPayload, fd)
 	thisLength := 8 + Afc_header_size
 	header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_file_close, This_length: thisLength, Entire_length: thisLength}
 	conn.packageNumber++
@@ -285,11 +290,11 @@ func (conn *Connection) PullSingleFile(srcPath, dstPath string) error {
 	if fileInfo.IsLink() {
 		srcPath = fileInfo.stLinktarget
 	}
-	fd, err := conn.openFile(srcPath, Afc_Mode_RDONLY)
+	fd, err := conn.OpenFile(srcPath, Afc_Mode_RDONLY)
 	if err != nil {
 		return err
 	}
-	defer conn.closeFile(fd)
+	defer conn.CloseFile(fd)
 
 	f, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
 	if err != nil {
@@ -301,7 +306,7 @@ func (conn *Connection) PullSingleFile(srcPath, dstPath string) error {
 	maxReadSize := 64 * 1024
 	for leftSize > 0 {
 		headerPayload := make([]byte, 16)
-		headerPayload[0] = fd
+		binary.LittleEndian.PutUint64(headerPayload, fd)
 		thisLength := Afc_header_size + 16
 		binary.LittleEndian.PutUint64(headerPayload[8:], uint64(maxReadSize))
 		header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_file_read, This_length: thisLength, Entire_length: thisLength}
@@ -369,11 +374,11 @@ func (conn *Connection) Push(srcPath, dstPath string) error {
 		}
 	}
 
-	fd, err := conn.openFile(dstPath, Afc_Mode_WR)
+	fd, err := conn.OpenFile(dstPath, Afc_Mode_WR)
 	if err != nil {
 		return err
 	}
-	defer conn.closeFile(fd)
+	defer conn.CloseFile(fd)
 
 	maxWriteSize := 64 * 1024
 	chunk := make([]byte, maxWriteSize)
@@ -387,7 +392,7 @@ func (conn *Connection) Push(srcPath, dstPath string) error {
 		}
 
 		headerPayload := make([]byte, 8)
-		headerPayload[0] = fd
+		binary.LittleEndian.PutUint64(headerPayload, fd)
 		thisLength := Afc_header_size + 8
 		header := AfcPacketHeader{Magic: Afc_magic, Packet_num: conn.packageNumber, Operation: Afc_operation_file_write, This_length: thisLength, Entire_length: thisLength + uint64(n)}
 		conn.packageNumber++
