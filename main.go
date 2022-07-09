@@ -726,7 +726,7 @@ The commands work as following:
 		b, _ = arguments.Bool("push")
 		if b {
 			sp, _ := arguments.String("--src")
-			dp, _ := arguments.String("--dstPath")
+			dp, _ := arguments.String("--dst")
 			err = afcService.Push(sp, dp)
 			exitIfError("fsync: push failed", err)
 		}

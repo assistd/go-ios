@@ -57,7 +57,7 @@ func copyReports(afc *afc.Connection, cwd string, pattern string, targetDir stri
 		}
 		log.Debugf("%+v", info)
 
-		if info.IsDir(){
+		if info.IsDir() {
 			err := os.Mkdir(targetFilePath, targetDirInfo.Mode().Perm())
 			if err != nil {
 				return err
@@ -69,7 +69,7 @@ func copyReports(afc *afc.Connection, cwd string, pattern string, targetDir stri
 			continue
 		}
 
-		err = afc.PullSingleFile(devicePath, targetFilePath)
+		err = afc.PullFile(devicePath, targetFilePath)
 		if err != nil {
 			return err
 		}

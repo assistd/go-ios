@@ -92,7 +92,7 @@ func TestConnection_pullSingleFile(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	err = conn.PullSingleFile("/DCIM/architecture_diagram.png", "architecture_diagram.png")
+	err = conn.Pull("/DCIM/architecture_diagram.png", "architecture_diagram.png")
 	if err != nil {
 		log.Fatalf("pull single file failed:%v", err)
 	}
