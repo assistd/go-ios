@@ -18,7 +18,7 @@ func TestConnection_Remove(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	err = conn.Remove("/DCIM/goios")
+	err = conn.RemovePath("/DCIM/goios")
 	if err != nil {
 		log.Fatalf("remove failed:%v", err)
 	}
@@ -61,7 +61,7 @@ func TestConnection_listDir(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	flist, err := conn.ListDir("/DCIM/")
+	flist, err := conn.ReadDir("/DCIM/")
 	if err != nil {
 		log.Fatalf("tree view failed:%v", err)
 	}

@@ -647,7 +647,7 @@ The commands work as following:
 		b, _ = arguments.Bool("ls")
 		if b {
 			path, _ := arguments.String("--path")
-			files, err := afcService.ListDir(path)
+			files, err := afcService.ReadDir(path)
 			exitIfError("fsync: ls failed", err)
 			for _, f := range files {
 				info, err := afcService.Stat(path + "/" + f)
@@ -668,7 +668,7 @@ The commands work as following:
 		b, _ = arguments.Bool("rm")
 		if b {
 			path, _ := arguments.String("--path")
-			err = afcService.Remove(path)
+			err = afcService.RemovePath(path)
 			exitIfError("fsync: remove failed", err)
 			return
 		}

@@ -41,6 +41,25 @@ const (
 	Afc_operation_make_link           uint64 = 0x0000001C // MakeLink
 	Afc_operation_set_file_time       uint64 = 0x0000001E // set st_mtime
 	Afc_operation_get_file_Hash_range uint64 = 0x0000001F // GetFileHashWithRange
+
+	/* iOS 6+ */
+	AFC_OP_FILE_SET_IMMUTABLE_HINT   = 0x00000020 /* FileRefSetImmutableHint */
+	AFC_OP_GET_SIZE_OF_PATH_CONTENTS = 0x00000021 /* GetSizeOfPathContents */
+	AFC_OP_REMOVE_PATH_AND_CONTENTS  = 0x00000022 /* RemovePathAndContents */
+	AFC_OP_DIR_OPEN                  = 0x00000023 /* DirectoryEnumeratorRefOpen */
+	AFC_OP_DIR_OPEN_RESULT           = 0x00000024 /* DirectoryEnumeratorRefOpenResult */
+	AFC_OP_DIR_READ                  = 0x00000025 /* DirectoryEnumeratorRefRead */
+	AFC_OP_DIR_CLOSE                 = 0x00000026 /* DirectoryEnumeratorRefClose */
+	/* iOS 7+ */
+	AFC_OP_FILE_READ_OFFSET  = 0x00000027 /* FileRefReadWithOffset */
+	AFC_OP_FILE_WRITE_OFFSET = 0x00000028 /* FileRefWriteWithOffset */
+)
+
+type LinkType int
+
+const (
+	AFC_HARDLINK LinkType = 1
+	AFC_SYMLINK  LinkType = 2
 )
 
 const (

@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"os"
-	"path"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 const serviceName = "com.apple.afc"
@@ -20,7 +18,7 @@ type Connection struct {
 	packageNumber uint64
 }
 
-func New(device ios.DeviceEntry) (*Connection, error) {
+func NewConn(device ios.DeviceEntry) (*Connection, error) {
 	deviceConn, err := ios.ConnectToService(device, serviceName)
 	if err != nil {
 		return nil, err
@@ -77,8 +75,16 @@ func (conn *Connection) request(ops uint64, data, payload []byte) (*AfcPacket, e
 	return &response, nil
 }
 
-func (conn *Connection) Remove(path string) error {
+func (conn *Connection) RemovePath(path string) error {
 	_, err := conn.request(Afc_operation_remove_path, []byte(path), nil)
+	return err
+}
+
+func (conn *Connection) RenamePath(from, to string) error {
+	data := make([]byte, len(from)+1+len(to)+1)
+	copy(data, from)
+	copy(data[len(from)+1:], to)
+	_, err := conn.request(Afc_operation_rename_path, data, nil)
 	return err
 }
 
@@ -117,7 +123,7 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 	return &si, nil
 }
 
-func (conn *Connection) ListDir(path string) ([]string, error) {
+func (conn *Connection) ReadDir(path string) ([]string, error) {
 	response, err := conn.request(Afc_operation_read_dir, []byte(path), nil)
 	if err != nil {
 		return nil, err
@@ -136,7 +142,7 @@ func (conn *Connection) ListDir(path string) ([]string, error) {
 //ListFiles returns all files in the given directory, matching the pattern.
 //Example: ListFiles(".", "*") returns all files and dirs in the current path the afc connection is in
 func (conn *Connection) ListFiles(cwd string, matchPattern string) ([]string, error) {
-	files, err := conn.ListDir(cwd)
+	files, err := conn.ReadDir(cwd)
 	if err != nil {
 		return nil, err
 	}
@@ -157,47 +163,6 @@ func (conn *Connection) ListFiles(cwd string, matchPattern string) ([]string, er
 	return filteredFiles, nil
 }
 
-func (conn *Connection) TreeView(dpath string, prefix string, treePoint bool) error {
-	fileInfo, err := conn.Stat(dpath)
-	if err != nil {
-		return err
-	}
-
-	namePrefix := "`--"
-	if !treePoint {
-		namePrefix = "|--"
-	}
-	tPrefix := prefix + namePrefix
-	if !fileInfo.IsDir() {
-		//return fmt.Errorf("error: %v is not dir", dpath)
-		fmt.Printf("%s %s\n", tPrefix, filepath.Base(dpath))
-		return nil
-	}
-
-	fmt.Printf("%s %s/\n", tPrefix, filepath.Base(dpath))
-	fileList, err := conn.ListDir(dpath)
-	if err != nil {
-		return err
-	}
-	for i, v := range fileList {
-		tp := false
-		if i == len(fileList)-1 {
-			tp = true
-		}
-		rp := prefix + "    "
-		if !treePoint {
-			rp = prefix + "|   "
-		}
-		nPath := path.Join(dpath, v)
-		err = conn.TreeView(nPath, rp, tp)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
 	data := make([]byte, len(path)+8)
 	binary.LittleEndian.PutUint64(data, mode)
@@ -214,6 +179,31 @@ func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
 	return fd, nil
 }
 
+func (conn *Connection) ReadFile(fd uint64, p []byte) (n int, err error) {
+	data := make([]byte, 16)
+	binary.LittleEndian.PutUint64(data, fd)
+	binary.LittleEndian.PutUint64(data[8:], uint64(len(p)))
+	response, err := conn.request(Afc_operation_file_read, data, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	log.Info("inbuf len:%v, read len:%v", len(p), len(response.Payload))
+	if len(response.Payload) > len(p) {
+		log.Fatalf("inbuf len:%v, read len:%v", len(p), len(response.Payload))
+	}
+
+	copy(p, response.Payload)
+	return len(response.Payload), nil
+}
+
+func (conn *Connection) WriteFile(fd uint64, p []byte) (n int, err error) {
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, fd)
+	_, err = conn.request(Afc_operation_file_write, data, p)
+	return len(p), err
+}
+
 func (conn *Connection) CloseFile(fd uint64) error {
 	data := make([]byte, 8)
 	binary.LittleEndian.PutUint64(data, fd)
@@ -221,116 +211,70 @@ func (conn *Connection) CloseFile(fd uint64) error {
 	return err
 }
 
-func (conn *Connection) PullFile(srcPath, dstPath string) error {
-	fileInfo, err := conn.Stat(srcPath)
+func (conn *Connection) LockFile(fd uint64) error {
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, fd)
+	_, err := conn.request(Afc_operation_file_close, data, nil)
+	return err
+}
+
+func (conn *Connection) SeekFile(fd uint64, offset int64, whence int) error {
+	data := make([]byte, 24)
+	binary.LittleEndian.PutUint64(data, fd)
+	binary.LittleEndian.PutUint64(data[8:], uint64(whence))
+	binary.LittleEndian.PutUint64(data[16:], uint64(offset))
+	_, err := conn.request(Afc_operation_file_seek, data, nil)
+	return err
+}
+
+func (conn *Connection) TellFile(fd uint64) (uint64, error) {
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, fd)
+	response, err := conn.request(Afc_operation_file_tell, data, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	if fileInfo.IsLink() {
-		srcPath = fileInfo.stLinktarget
-	}
-	fd, err := conn.OpenFile(srcPath, Afc_Mode_RDONLY)
-	if err != nil {
-		return err
-	}
-	defer conn.CloseFile(fd)
+	pos := binary.LittleEndian.Uint64(response.HeaderPayload)
+	return pos, err
+}
 
-	f, err := os.Create(dstPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	leftSize := fileInfo.stSize
-	maxReadSize := 64 * 1024
+func (conn *Connection) TruncateFile(fd uint64, size uint64) error {
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint64(data, fd)
-	binary.LittleEndian.PutUint64(data[8:], uint64(maxReadSize))
-	for leftSize > 0 {
-		response, err := conn.request(Afc_operation_file_read, data, nil)
-		if err != nil {
-			return err
-		}
-		leftSize -= int64(len(response.Payload))
-		f.Write(response.Payload)
-	}
-	return nil
+	binary.LittleEndian.PutUint64(data, size)
+	_, err := conn.request(Afc_operation_file_set_size, data, nil)
+	return err
 }
 
-func (conn *Connection) Pull(srcPath, dstPath string) error {
-	fileInfo, err := conn.Stat(srcPath)
-	if err != nil {
-		return err
-	}
-	if !fileInfo.IsDir() {
-		return conn.PullFile(srcPath, dstPath)
-	}
-	ret, _ := ios.PathExists(dstPath)
-	if !ret {
-		err = os.MkdirAll(dstPath, 0755)
-		if err != nil {
-			return err
-		}
-	}
-	fileList, err := conn.ListDir(srcPath)
-	if err != nil {
-		return err
-	}
-	for _, v := range fileList {
-		sp := path.Join(srcPath, v)
-		dp := path.Join(dstPath, v)
-		err = conn.Pull(sp, dp)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (conn *Connection) Truncate(path string, size uint64) error {
+	data := make([]byte, 8+len(path))
+	binary.LittleEndian.PutUint64(data, size)
+	copy(data[8:], path)
+	_, err := conn.request(Afc_operation_TRUNCATE, data, nil)
+	return err
 }
 
-func (conn *Connection) Push(srcPath, dstPath string) error {
-	ret, _ := ios.PathExists(srcPath)
-	if !ret {
-		return fmt.Errorf("%s: no such file", srcPath)
-	}
+func (conn *Connection) MakeLink(link LinkType, target, linkname string) error {
+	data := make([]byte, 8+len(target)+1+len(linkname)+1)
+	binary.LittleEndian.PutUint64(data, uint64(link))
+	copy(data[8:], target)
+	copy(data[8+len(target)+1:], linkname)
+	_, err := conn.request(Afc_operation_make_link, data, nil)
+	return err
+}
 
-	f, err := os.Open(srcPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+func (conn *Connection) SetFileTime(path string, t time.Time) error {
+	data := make([]byte, 8+len(path)+1)
+	binary.LittleEndian.PutUint64(data, uint64(t.UnixNano()))
+	copy(data[8:], path)
+	_, err := conn.request(Afc_operation_set_file_time, data, nil)
+	return err
+}
 
-	if fileInfo, _ := conn.Stat(dstPath); fileInfo != nil {
-		if fileInfo.IsDir() {
-			dstPath = path.Join(dstPath, filepath.Base(srcPath))
-		}
-	}
-
-	fd, err := conn.OpenFile(dstPath, Afc_Mode_WR)
-	if err != nil {
-		return err
-	}
-	defer conn.CloseFile(fd)
-
-	maxWriteSize := 64 * 1024
-	chunk := make([]byte, maxWriteSize)
-	for {
-		n, err := f.Read(chunk)
-		if err != nil && err != io.EOF {
-			return err
-		}
-		if n == 0 {
-			break
-		}
-
-		data := make([]byte, 8)
-		binary.LittleEndian.PutUint64(data, fd)
-		_, err = conn.request(Afc_operation_file_write, data, chunk[0:n])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (conn *Connection) RemovePathAndContents(path string) error {
+	_, err := conn.request(AFC_OP_REMOVE_PATH_AND_CONTENTS, []byte(path), nil)
+	return err
 }
 
 func (conn *Connection) Close() {
