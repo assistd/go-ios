@@ -227,35 +227,44 @@ func (fs *Fsync) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (fs *Fsync) Open(name string) (afero.File, error) {
-	fd, err := fs.Connection.OpenFile(name, Afc_Mode_RDONLY)
-	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: name, Err: syscall.ENOENT}
-	}
-
-	return &File{pfd: fd, absPath: name, conn: fs.Connection}, nil
+	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
 // OpenFile see https://github.com/libimobiledevice/ifuse/blob/master/src/ifuse.c#L177
 func (fs *Fsync) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
+	info, err := fs.Connection.Stat(name)
+	if err == nil {
+		if info.IsDir() {
+			return &File{absPath: name, conn: fs.Connection, isdir: true}, nil
+		}
+	}
+
 	var afcFlags uint64
-	if flag&os.O_RDONLY != 0 {
+	switch flag & 0x03 {
+	case os.O_RDONLY:
 		afcFlags = Afc_Mode_RDONLY
-	} else if flag&os.O_WRONLY != 0 {
-		if flag&os.O_TRUNC != 0 {
-			afcFlags = Afc_Mode_WRONLY
-		} else if flag&os.O_APPEND != 0 {
-			afcFlags = Afc_Mode_APPEND
-		} else {
-			afcFlags = Afc_Mode_RW
+	case os.O_WRONLY:
+		{
+			if flag&os.O_TRUNC != 0 {
+				afcFlags = Afc_Mode_WRONLY
+			} else if flag&os.O_APPEND != 0 {
+				afcFlags = Afc_Mode_APPEND
+			} else {
+				afcFlags = Afc_Mode_RW
+			}
 		}
-	} else if flag&os.O_RDWR == os.O_RDWR {
-		if flag&os.O_TRUNC != 0 {
-			afcFlags = Afc_Mode_WR
-		} else if flag&os.O_APPEND != 0 {
-			afcFlags = Afc_Mode_RDAPPEND
-		} else {
-			afcFlags = Afc_Mode_RW
+	case os.O_RDWR:
+		{
+			if flag&os.O_TRUNC != 0 {
+				afcFlags = Afc_Mode_WR
+			} else if flag&os.O_APPEND != 0 {
+				afcFlags = Afc_Mode_RDAPPEND
+			} else {
+				afcFlags = Afc_Mode_RW
+			}
 		}
+	default:
+		return nil, fmt.Errorf("invalid flag")
 	}
 
 	fd, err := fs.Connection.OpenFile(name, afcFlags)
@@ -263,7 +272,7 @@ func (fs *Fsync) OpenFile(name string, flag int, perm os.FileMode) (afero.File, 
 		return nil, err
 	}
 
-	return &File{pfd: fd, absPath: name, conn: fs.Connection}, nil
+	return &File{pfd: fd, absPath: name, conn: fs.Connection, isdir: false}, nil
 }
 
 func (fs *Fsync) Remove(name string) error {

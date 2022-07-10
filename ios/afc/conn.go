@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -17,6 +19,7 @@ const serviceName = "com.apple.afc"
 type Connection struct {
 	deviceConn    ios.DeviceConnectionInterface
 	packageNumber uint64
+	mutex         sync.Mutex
 }
 
 func NewConn(device ios.DeviceEntry) (*Connection, error) {
@@ -51,6 +54,8 @@ func (conn *Connection) checkOperationStatus(packet AfcPacket) error {
 }
 
 func (conn *Connection) request(ops uint64, data, payload []byte) (*AfcPacket, error) {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
 	header := AfcPacketHeader{
 		Magic:         Afc_magic,
 		Packet_num:    conn.packageNumber,
@@ -125,8 +130,10 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 }
 
 func (conn *Connection) ReadDir(path string) ([]string, error) {
+	log.Infof("ReadDir path:%v", path)
 	response, err := conn.request(Afc_operation_read_dir, []byte(path), nil)
 	if err != nil {
+		log.Infof("ReadDir error:%v", err)
 		return nil, err
 	}
 
@@ -137,15 +144,19 @@ func (conn *Connection) ReadDir(path string) ([]string, error) {
 			fileList = append(fileList, string(v))
 		}
 	}
+
+	log.Infof("ReadDir end:%v", fileList)
 	return fileList, nil
 }
 
 func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
-	data := make([]byte, len(path)+8)
+	log.Infof("OpenFile path:%v", path)
+	data := make([]byte, 8+len(path)+1)
 	binary.LittleEndian.PutUint64(data, mode)
 	copy(data[8:], path)
-	response, err := conn.request(Afc_operation_file_open, data, nil)
+	response, err := conn.request(Afc_operation_file_open, data, make([]byte, 0))
 	if err != nil {
+		log.Errorf("OpenFile path:%v err:%v", path, err)
 		return 0, err
 	}
 	fd := binary.LittleEndian.Uint64(response.HeaderPayload)
@@ -157,6 +168,8 @@ func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
 }
 
 func (conn *Connection) ReadFile(fd uint64, p []byte) (n int, err error) {
+	log.Infof("ReadFile inbuf pd:%v, read len:%v", fd, len(p))
+	defer log.Info("ReadFile end")
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint64(data, fd)
 	binary.LittleEndian.PutUint64(data[8:], uint64(len(p)))
@@ -165,13 +178,20 @@ func (conn *Connection) ReadFile(fd uint64, p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	log.Info("inbuf len:%v, read len:%v", len(p), len(response.Payload))
-	if len(response.Payload) > len(p) {
+	log.Infof("inbuf len:%v, read len:%v", len(p), len(response.Payload))
+	n = len(response.Payload)
+	if n > len(p) {
 		log.Fatalf("inbuf len:%v, read len:%v", len(p), len(response.Payload))
 	}
+	if n == 0 {
+		return n, io.EOF
+	}
 
+	if n < len(p) {
+		err = io.EOF
+	}
 	copy(p, response.Payload)
-	return len(response.Payload), nil
+	return
 }
 
 func (conn *Connection) WriteFile(fd uint64, p []byte) (n int, err error) {
@@ -257,5 +277,6 @@ func (conn *Connection) RemovePathAndContents(path string) error {
 }
 
 func (conn *Connection) Close() {
+	log.Infof("Close connection")
 	conn.deviceConn.Close()
 }

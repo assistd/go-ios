@@ -24,6 +24,21 @@ func TestConnection_Remove(t *testing.T) {
 	}
 }
 
+func TestConnection_OpenFile(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	fd, err := conn.OpenFile("/test.txt", 0, 0)
+	if err != nil {
+		log.Fatalf("OpenFile failed:%v", err)
+	}
+	t.Logf("fd:%v\n", fd)
+}
+
 func TestConnection_Mkdir(t *testing.T) {
 	deviceEnrty, _ := ios.GetDevice(test_device_udid)
 

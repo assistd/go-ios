@@ -10,10 +10,14 @@ type File struct {
 	conn    *Connection
 	pfd     uint64
 	absPath string
+	isdir   bool
 }
 
 func (f *File) Close() (err error) {
-	return f.conn.CloseFile(f.pfd)
+	if !f.isdir {
+		return f.conn.CloseFile(f.pfd)
+	}
+	return nil
 }
 
 func (f *File) Read(p []byte) (n int, err error) {
@@ -53,7 +57,7 @@ func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 	for _, entry := range files {
 		fileInfo, err := f.conn.Stat(f.absPath + "/" + entry)
 		if err != nil {
-			return
+			return nil, err
 		}
 		fi = append(fi, fileInfo)
 	}
