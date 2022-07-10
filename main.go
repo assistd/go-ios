@@ -676,7 +676,7 @@ The commands work as following:
 		b, _ = arguments.Bool("stat")
 		if b {
 			path, _ := arguments.String("--path")
-			info, err := afcService.Stat(path)
+			info, err := afcService.Connection.Stat(path)
 			exitIfError("fsync: stat failed", err)
 			fmt.Printf("IFMT: ")
 			if info.IsDir() {
@@ -701,7 +701,7 @@ The commands work as following:
 		b, _ = arguments.Bool("mkdir")
 		if b {
 			path, _ := arguments.String("--path")
-			err = afcService.Mkdir(path)
+			err = afcService.MakeDir(path)
 			exitIfError("fsync: mkdir failed", err)
 			return
 		}

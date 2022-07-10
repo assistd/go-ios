@@ -3,6 +3,7 @@ package afc
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
@@ -88,7 +89,7 @@ func (conn *Connection) RenamePath(from, to string) error {
 	return err
 }
 
-func (conn *Connection) Mkdir(path string) error {
+func (conn *Connection) MakeDir(path string) error {
 	_, err := conn.request(Afc_operation_make_dir, []byte(path), nil)
 	return err
 }
@@ -137,30 +138,6 @@ func (conn *Connection) ReadDir(path string) ([]string, error) {
 		}
 	}
 	return fileList, nil
-}
-
-//ListFiles returns all files in the given directory, matching the pattern.
-//Example: ListFiles(".", "*") returns all files and dirs in the current path the afc connection is in
-func (conn *Connection) ListFiles(cwd string, matchPattern string) ([]string, error) {
-	files, err := conn.ReadDir(cwd)
-	if err != nil {
-		return nil, err
-	}
-
-	var filteredFiles []string
-	for _, f := range files {
-		if f == "" {
-			continue
-		}
-		matches, err := filepath.Match(matchPattern, f)
-		if err != nil {
-			log.Warn("error while matching pattern", err)
-		}
-		if matches {
-			filteredFiles = append(filteredFiles, f)
-		}
-	}
-	return filteredFiles, nil
 }
 
 func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
@@ -218,13 +195,15 @@ func (conn *Connection) LockFile(fd uint64) error {
 	return err
 }
 
-func (conn *Connection) SeekFile(fd uint64, offset int64, whence int) error {
+func (conn *Connection) SeekFile(fd uint64, offset int64, whence int) (int64, error) {
 	data := make([]byte, 24)
 	binary.LittleEndian.PutUint64(data, fd)
 	binary.LittleEndian.PutUint64(data[8:], uint64(whence))
 	binary.LittleEndian.PutUint64(data[16:], uint64(offset))
-	_, err := conn.request(Afc_operation_file_seek, data, nil)
-	return err
+	response, err := conn.request(Afc_operation_file_seek, data, nil)
+	pos := binary.LittleEndian.Uint64(response.HeaderPayload)
+	log.Println("seek:", hex.Dump(response.HeaderPayload))
+	return int64(pos), err
 }
 
 func (conn *Connection) TellFile(fd uint64) (uint64, error) {
@@ -239,10 +218,10 @@ func (conn *Connection) TellFile(fd uint64) (uint64, error) {
 	return pos, err
 }
 
-func (conn *Connection) TruncateFile(fd uint64, size uint64) error {
+func (conn *Connection) TruncateFile(fd uint64, size int64) error {
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint64(data, fd)
-	binary.LittleEndian.PutUint64(data, size)
+	binary.LittleEndian.PutUint64(data, uint64(size))
 	_, err := conn.request(Afc_operation_file_set_size, data, nil)
 	return err
 }

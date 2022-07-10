@@ -37,7 +37,11 @@ func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir str
 	if err != nil {
 		return err
 	}
-	files, err := conn.ListFiles(cwd, pattern)
+
+	fsync := &afc.Fsync{
+		Connection: conn,
+	}
+	files, err := fsync.ListFiles(cwd, pattern)
 	if err != nil {
 		return err
 	}
@@ -69,9 +73,6 @@ func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir str
 			continue
 		}
 
-		fsync := &afc.Fsync{
-			Connection: conn,
-		}
 		err = fsync.PullFile(devicePath, targetFilePath)
 		if err != nil {
 			return err
@@ -94,7 +95,7 @@ func RemoveReports(device ios.DeviceEntry, cwd string, pattern string) error {
 	if err != nil {
 		return err
 	}
-	afc := afc.NewFromConn(deviceConn)
+	afc := afc.NewFsyncFromConn(deviceConn)
 	files, err := afc.ListFiles(cwd, pattern)
 	if err != nil {
 		return err
@@ -122,7 +123,7 @@ func ListReports(device ios.DeviceEntry, pattern string) ([]string, error) {
 	if err != nil {
 		return []string{}, err
 	}
-	afc := afc.NewFromConn(deviceConn)
+	afc := afc.NewFsyncFromConn(deviceConn)
 	return afc.ListFiles(".", pattern)
 }
 
