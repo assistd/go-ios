@@ -39,6 +39,10 @@ func (conn *Connection) BrowseAllApps() ([]AppInfo, error) {
 	return conn.browseApps(browseApps("", true))
 }
 
+func (conn *Connection) BrowseAnyApps() ([]AppInfo, error) {
+	return conn.browseApps(browseAnyApps())
+}
+
 func (conn *Connection) browseApps(request interface{}) ([]AppInfo, error) {
 	reader := conn.deviceConn.Reader()
 	bytes, err := conn.plistCodec.Encode(request)
@@ -147,6 +151,7 @@ func browseApps(applicationType string, showLaunchProhibitedApps bool) map[strin
 		"SignerIdentity",
 		"UIDeviceFamily",
 		"UIRequiredDeviceCapabilities",
+		"UIFileSharingEnabled",
 	}
 	clientOptions := map[string]interface{}{
 		"ReturnAttributes": returnAttributes,
@@ -156,6 +161,20 @@ func browseApps(applicationType string, showLaunchProhibitedApps bool) map[strin
 	}
 	if showLaunchProhibitedApps {
                 clientOptions["ShowLaunchProhibitedApps"] = true
+	}
+	return map[string]interface{}{"ClientOptions": clientOptions, "Command": "Browse"}
+}
+
+func browseAnyApps() map[string]interface{} {
+	returnAttributes := []string{
+		"CFBundleIdentifier",
+		"CFBundleDisplayName",
+		"CFBundleVersion",
+		"UIFileSharingEnabled",
+	}
+	clientOptions := map[string]interface{}{
+		"ApplicationType":  "Any",
+		"ReturnAttributes": returnAttributes,
 	}
 	return map[string]interface{}{"ClientOptions": clientOptions, "Command": "Browse"}
 }
@@ -185,4 +204,5 @@ type AppInfo struct {
 	SignerIdentity               string
 	UIDeviceFamily               []int
 	UIRequiredDeviceCapabilities []string
+	UIFileSharingEnabled         bool
 }

@@ -1,6 +1,15 @@
 package afc
 
 /*
+import (
+	"fmt"
+	"github.com/danielpaulus/go-ios/ios"
+	"io"
+	"log"
+	"path"
+	"testing"
+)
+
 const test_device_udid = "your device udid"
 
 func TestConnection_Remove(t *testing.T) {
@@ -17,6 +26,21 @@ func TestConnection_Remove(t *testing.T) {
 	}
 }
 
+func TestConnection_OpenFile(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	fd, err := conn.OpenFile("/test.txt", 0, 0)
+	if err != nil {
+		log.Fatalf("OpenFile failed:%v", err)
+	}
+	t.Logf("fd:%v\n", fd)
+}
+
 func TestConnection_Mkdir(t *testing.T) {
 	deviceEnrty, _ := ios.GetDevice(test_device_udid)
 
@@ -25,7 +49,7 @@ func TestConnection_Mkdir(t *testing.T) {
 		log.Fatalf("connect service failed: %v", err)
 	}
 
-	err = conn.Mkdir("/DCIM/TestDir")
+	err = conn.MakeDir("/DCIM/TestDir")
 	if err != nil {
 		log.Fatalf("mkdir failed:%v", err)
 	}
@@ -44,6 +68,24 @@ func TestConnection_stat(t *testing.T) {
 		log.Fatalf("get Stat failed:%v", err)
 	}
 	log.Printf("Stat :%+v", si)
+}
+
+func TestConnection_SeekFile(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	fd, err := conn.Connection.OpenFile("/wdb", Afc_Mode_RDONLY)
+	if err != nil {
+		log.Fatalf("OpenFile failed:%v", err)
+	}
+	t.Logf("fd:%v\n", fd)
+
+	pos, err := conn.SeekFile(fd, 0, io.SeekEnd)
+	t.Logf("seek end pos:%v err:%v\n", pos, err)
 }
 
 func TestConnection_listDir(t *testing.T) {

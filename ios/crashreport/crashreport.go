@@ -12,6 +12,19 @@ import (
 const crashReportMoverService = "com.apple.crashreportmover"
 const crashReportCopyMobileService = "com.apple.crashreportcopymobile"
 
+func NewFsync(device ios.DeviceEntry) (*afc.Fsync, error) {
+	err := moveReports(device)
+	if err != nil {
+		return nil, err
+	}
+	deviceConn, err := ios.ConnectToService(device, crashReportCopyMobileService)
+	if err != nil {
+		return nil, err
+	}
+	fsync := afc.NewFsyncFromConn(deviceConn)
+	return fsync, nil
+}
+
 //DownloadReports gets all crashreports based on the provided file pattern and writes them to targetdir.
 //Directories will be recursively added without applying the pattern recursively.
 // pattern can be typical filepattern, if you want all files use "*"
@@ -19,16 +32,11 @@ func DownloadReports(device ios.DeviceEntry, pattern string, targetdir string) e
 	if pattern == "" {
 		return fmt.Errorf("empty pattern not ok, just use *")
 	}
-	err := moveReports(device)
+	fsync, err := NewFsync(device)
 	if err != nil {
 		return err
 	}
-	deviceConn, err := ios.ConnectToService(device, crashReportCopyMobileService)
-	if err != nil {
-		return err
-	}
-	afc := afc.NewFromConn(deviceConn)
-	return copyReports(afc, ".", pattern, targetdir)
+	return copyReports(fsync.Connection, ".", pattern, targetdir)
 }
 
 func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir string) error {
@@ -37,7 +45,11 @@ func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir str
 	if err != nil {
 		return err
 	}
-	files, err := conn.ListFiles(cwd, pattern)
+
+	fsync := &afc.Fsync{
+		Connection: conn,
+	}
+	files, err := fsync.ListFiles(cwd, pattern)
 	if err != nil {
 		return err
 	}
@@ -69,9 +81,6 @@ func copyReports(conn *afc.Connection, cwd string, pattern string, targetDir str
 			continue
 		}
 
-		fsync := &afc.Fsync{
-			Connection: conn,
-		}
 		err = fsync.PullFile(devicePath, targetFilePath)
 		if err != nil {
 			return err
@@ -94,7 +103,7 @@ func RemoveReports(device ios.DeviceEntry, cwd string, pattern string) error {
 	if err != nil {
 		return err
 	}
-	afc := afc.NewFromConn(deviceConn)
+	afc := afc.NewFsyncFromConn(deviceConn)
 	files, err := afc.ListFiles(cwd, pattern)
 	if err != nil {
 		return err
@@ -114,16 +123,11 @@ func RemoveReports(device ios.DeviceEntry, cwd string, pattern string) error {
 }
 
 func ListReports(device ios.DeviceEntry, pattern string) ([]string, error) {
-	err := moveReports(device)
+	fsync, err := NewFsync(device)
 	if err != nil {
-		return []string{}, err
+		return nil, err
 	}
-	deviceConn, err := ios.ConnectToService(device, crashReportCopyMobileService)
-	if err != nil {
-		return []string{}, err
-	}
-	afc := afc.NewFromConn(deviceConn)
-	return afc.ListFiles(".", pattern)
+	return fsync.ListFiles(".", pattern)
 }
 
 func moveReports(device ios.DeviceEntry) error {
