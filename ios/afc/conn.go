@@ -100,7 +100,7 @@ func (conn *Connection) MakeDir(path string) error {
 }
 
 func (conn *Connection) Stat(path string) (*statInfo, error) {
-	response, err := conn.request(Afc_operation_file_info, []byte(path), make([]byte, 0))
+	response, err := conn.request(Afc_operation_file_info, []byte(path), nil)
 	if err != nil {
 		return nil, err
 	}

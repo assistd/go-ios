@@ -223,7 +223,17 @@ func (fs *Fsync) Mkdir(name string, perm os.FileMode) error {
 }
 
 func (fs *Fsync) MkdirAll(path string, perm os.FileMode) error {
-	return syscall.EPERM
+	info, err := fs.Connection.Stat(path)
+	if err != nil {
+		// TODO: add MkdirAll
+		log.Errorf("mkdir: %v, err:%v", path, err)
+		return err
+	}
+
+	if info.IsDir() {
+		return nil
+	}
+	return fmt.Errorf("path:%v is not directory", path)
 }
 
 func (fs *Fsync) Open(name string) (afero.File, error) {
