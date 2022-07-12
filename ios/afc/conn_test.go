@@ -3,12 +3,13 @@ package afc
 import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
+	"io"
 	"log"
 	"path"
 	"testing"
 )
 
-const test_device_udid = "f90589e357ef231602d3bbed14ba748af2ed8373"
+const test_device_udid = "fe32ecec58d608c8735f7f8ca67ca99bdea10ee3"
 
 func TestConnection_Remove(t *testing.T) {
 	deviceEnrty, _ := ios.GetDevice(test_device_udid)
@@ -66,6 +67,27 @@ func TestConnection_stat(t *testing.T) {
 		log.Fatalf("get Stat failed:%v", err)
 	}
 	log.Printf("Stat :%+v", si)
+}
+
+func TestConnection_SeekFile(t *testing.T) {
+	deviceEnrty, _ := ios.GetDevice(test_device_udid)
+
+	conn, err := New(deviceEnrty)
+	if err != nil {
+		log.Fatalf("connect service failed: %v", err)
+	}
+
+	fd, err := conn.Connection.OpenFile("/wdb", Afc_Mode_RDONLY)
+	if err != nil {
+		log.Fatalf("OpenFile failed:%v", err)
+	}
+	t.Logf("fd:%v\n", fd)
+
+	err = conn.SeekFile(fd, 0, io.SeekEnd)
+	t.Logf("seek end err:%v\n", err)
+
+	ret2, err := conn.TellFile(fd)
+	t.Logf("tell pos:%v, err:%v\n", ret2, err)
 }
 
 func TestConnection_listDir(t *testing.T) {
