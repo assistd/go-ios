@@ -225,9 +225,7 @@ func (fs *Fsync) Mkdir(name string, perm os.FileMode) error {
 func (fs *Fsync) MkdirAll(path string, perm os.FileMode) error {
 	info, err := fs.Connection.Stat(path)
 	if err != nil {
-		// TODO: add MkdirAll
-		log.Errorf("mkdir: %v, err:%v", path, err)
-		return err
+		return fs.MakeDir(path)
 	}
 
 	if info.IsDir() {
