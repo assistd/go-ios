@@ -73,7 +73,7 @@ func (conn *Connection) request(ops uint64, data, payload []byte) (*AfcPacket, e
 		return nil, err
 	}
 	if err = conn.checkOperationStatus(response); err != nil {
-		return nil, fmt.Errorf("request: unexpected afc status: %v", err)
+		return nil, fmt.Errorf("unexpected afc status: %v", err)
 	}
 	return &response, nil
 }
@@ -107,7 +107,7 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 	response, err := conn.request(Afc_operation_file_info, []byte(path), nil)
 	if err != nil {
 		conn.mutex.Unlock()
-		return nil, err
+		return nil, fmt.Errorf("cannot stat '%v': %v", path, err)
 	}
 	conn.mutex.Unlock()
 
