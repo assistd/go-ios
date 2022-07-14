@@ -13,7 +13,6 @@ require (
 	github.com/spf13/afero v1.8.2
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa
-	google.golang.org/protobuf v1.28.0
 	howett.net/plist v0.0.0-20200419221736-3b63eb3a43b5
 )
 

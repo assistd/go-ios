@@ -3,6 +3,8 @@ package afc
 import (
 	log "github.com/sirupsen/logrus"
 	"os"
+	"path"
+	"strings"
 	"syscall"
 )
 
@@ -13,6 +15,14 @@ type File struct {
 	isdir   bool
 }
 
+func NewFile(conn *Connection, pfd uint64, absPath string, isdir bool) *File {
+	return &File{
+		conn:    conn,
+		pfd:     pfd,
+		absPath: absPath,
+		isdir:   isdir,
+	}
+}
 func (f *File) Close() (err error) {
 	if !f.isdir {
 		return f.conn.CloseFile(f.pfd)
@@ -55,9 +65,23 @@ func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 	}
 
 	for _, entry := range files {
-		fileInfo, err := f.conn.Stat(f.absPath + "/" + entry)
+		fileInfo, err := f.conn.Stat(path.Join(f.absPath, entry))
 		if err != nil {
-			return nil, err
+			if strings.Contains(err.Error(), getError(Afc_Err_PermDenied).Error()) {
+				log.Errorf("Readdir: %v", err)
+				fileInfo = &statInfo{
+					name:         entry,
+					stSize:       0,
+					stBlocks:     0,
+					stCtime:      0,
+					stMtime:      0,
+					stNlink:      "",
+					stIfmt:       "",
+					stLinktarget: "",
+				}
+			} else {
+				return nil, err
+			}
 		}
 		fi = append(fi, fileInfo)
 	}
