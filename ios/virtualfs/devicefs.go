@@ -26,7 +26,7 @@ func (fs *DeviceFs) initialize() error {
 		if err != nil {
 			return err
 		}
-		conn, err := afc.NewConn(deviceEntry)
+		conn, err := afc.NewAfcConn(deviceEntry)
 		if err != nil {
 			return err
 		}

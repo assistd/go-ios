@@ -3,7 +3,7 @@ package testmanagerd
 import (
 	"context"
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios/house_arrest"
+	"github.com/danielpaulus/go-ios/ios/afc"
 	"path"
 	"strings"
 	"time"
@@ -466,13 +466,13 @@ func setupXcuiTest(device ios.DeviceEntry, bundleID string, testRunnerBundleID s
 	}
 	log.Debugf("app info found: %+v", info)
 
-	houseArrestService, err := house_arrest.New(device, testRunnerBundleID)
-	defer houseArrestService.Close()
+	fsync, err := afc.New2(device, testRunnerBundleID)
+	defer fsync.Close()
 	if err != nil {
 		return uuid.UUID{}, "", nskeyedarchiver.XCTestConfiguration{}, testInfo{}, err
 	}
 	log.Debugf("creating test config")
-	testConfigPath, testConfig, err := createTestConfigOnDevice(testSessionID, info, houseArrestService, xctestConfigFileName)
+	testConfigPath, testConfig, err := createTestConfigOnDevice(testSessionID, info, fsync, xctestConfigFileName)
 	if err != nil {
 		return uuid.UUID{}, "", nskeyedarchiver.XCTestConfiguration{}, testInfo{}, err
 	}
@@ -480,7 +480,7 @@ func setupXcuiTest(device ios.DeviceEntry, bundleID string, testRunnerBundleID s
 	return testSessionID, testConfigPath, testConfig, info, nil
 }
 
-func createTestConfigOnDevice(testSessionID uuid.UUID, info testInfo, houseArrestService *house_arrest.Connection, xctestConfigFileName string) (string, nskeyedarchiver.XCTestConfiguration, error) {
+func createTestConfigOnDevice(testSessionID uuid.UUID, info testInfo, fsync *afc.Fsync, xctestConfigFileName string) (string, nskeyedarchiver.XCTestConfiguration, error) {
 	relativeXcTestConfigPath := path.Join("tmp", testSessionID.String()+".xctestconfiguration")
 	xctestConfigPath := path.Join(info.testRunnerHomePath, relativeXcTestConfigPath)
 
@@ -492,7 +492,7 @@ func createTestConfigOnDevice(testSessionID uuid.UUID, info testInfo, houseArres
 		return "", nskeyedarchiver.XCTestConfiguration{}, err
 	}
 
-	err = houseArrestService.SendFile([]byte(result), relativeXcTestConfigPath)
+	err = fsync.SendFile([]byte(result), relativeXcTestConfigPath)
 	if err != nil {
 		return "", nskeyedarchiver.XCTestConfiguration{}, err
 	}

@@ -13,18 +13,17 @@ import (
 
 type SandBoxFs struct {
 	DeviceFs
-	houseArrestConn *afc.HouseArrestConnection
-	bundleId        string
+	bundleId string
 }
 
 func NewSandBoxFs(udid string, bundleId string, mountPath string) *SandBoxFs {
-	return &SandBoxFs{DeviceFs: DeviceFs{
-		udid:      udid,
-		conn:      nil,
-		mountPath: mountPath,
-	},
-		bundleId:        bundleId,
-		houseArrestConn: nil}
+	return &SandBoxFs{
+		DeviceFs: DeviceFs{
+			udid:      udid,
+			conn:      nil,
+			mountPath: mountPath,
+		},
+		bundleId: bundleId}
 }
 
 func (fs *SandBoxFs) initialize() error {
@@ -37,8 +36,7 @@ func (fs *SandBoxFs) initialize() error {
 		if err != nil {
 			return err
 		}
-		fs.houseArrestConn = houseArrestConn
-		fs.conn = fs.houseArrestConn.AfcConnection()
+		fs.conn = houseArrestConn
 	}
 	return nil
 }

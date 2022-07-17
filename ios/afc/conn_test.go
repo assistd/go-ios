@@ -83,11 +83,8 @@ func TestConnection_SeekFile(t *testing.T) {
 	}
 	t.Logf("fd:%v\n", fd)
 
-	err = conn.SeekFile(fd, 0, io.SeekEnd)
-	t.Logf("seek end err:%v\n", err)
-
-	ret2, err := conn.TellFile(fd)
-	t.Logf("tell pos:%v, err:%v\n", ret2, err)
+	pos, err := conn.SeekFile(fd, 0, io.SeekEnd)
+	t.Logf("seek end pos:%v err:%v\n", pos, err)
 }
 
 func TestConnection_listDir(t *testing.T) {

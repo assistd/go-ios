@@ -20,7 +20,15 @@ type Fsync struct {
 }
 
 func New(device ios.DeviceEntry) (*Fsync, error) {
-	conn, err := NewConn(device)
+	conn, err := NewAfcConn(device)
+	if err != nil {
+		return nil, err
+	}
+	return &Fsync{conn}, nil
+}
+
+func New2(device ios.DeviceEntry, bundleId string) (*Fsync, error) {
+	conn, err := NewHouseArrestConn(device, bundleId)
 	if err != nil {
 		return nil, err
 	}
@@ -29,6 +37,20 @@ func New(device ios.DeviceEntry) (*Fsync, error) {
 
 func NewFsyncFromConn(devConn ios.DeviceConnectionInterface) *Fsync {
 	return &Fsync{&Connection{deviceConn: devConn}}
+}
+
+func (fs *Fsync) SendFile(b []byte, path string) error {
+	fd, err := fs.Connection.OpenFile(path, Afc_Mode_WRONLY)
+	if err != nil {
+		return err
+	}
+	_, err = fs.Connection.WriteFile(fd, b)
+	if err != nil {
+		return err
+	}
+
+	defer fs.CloseFile(fd)
+	return nil
 }
 
 //ListFiles returns all files in the given directory, matching the pattern.

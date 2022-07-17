@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const serviceName = "com.apple.afc"
+const afcServiceName = "com.apple.afc"
 
 type Connection struct {
 	deviceConn    ios.DeviceConnectionInterface
@@ -21,8 +21,8 @@ type Connection struct {
 	mutex         sync.Mutex
 }
 
-func NewConn(device ios.DeviceEntry) (*Connection, error) {
-	deviceConn, err := ios.ConnectToService(device, serviceName)
+func NewAfcConn(device ios.DeviceEntry) (*Connection, error) {
+	deviceConn, err := ios.ConnectToService(device, afcServiceName)
 	if err != nil {
 		return nil, err
 	}
