@@ -69,7 +69,7 @@ func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 		if err != nil {
 			if strings.Contains(err.Error(), getError(Afc_Err_PermDenied).Error()) {
 				log.Errorf("Readdir: %v", err)
-				fileInfo = &statInfo{
+				fileInfo = &StatInfo{
 					name:         entry,
 					stSize:       0,
 					stBlocks:     0,

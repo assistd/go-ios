@@ -102,7 +102,7 @@ func (conn *Connection) MakeDir(path string) error {
 	return err
 }
 
-func (conn *Connection) Stat(path string) (*statInfo, error) {
+func (conn *Connection) Stat(path string) (*StatInfo, error) {
 	conn.mutex.Lock()
 	response, err := conn.request(Afc_operation_file_info, []byte(path), nil)
 	if err != nil {
@@ -123,7 +123,7 @@ func (conn *Connection) Stat(path string) (*statInfo, error) {
 		statInfoMap[k] = v
 	}
 
-	var si statInfo
+	var si StatInfo
 	si.name = filepath.Base(path)
 	si.stSize, _ = strconv.ParseInt(statInfoMap["st_size"], 10, 64)
 	si.stBlocks, _ = strconv.ParseInt(statInfoMap["st_blocks"], 10, 64)

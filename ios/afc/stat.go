@@ -2,10 +2,11 @@ package afc
 
 import (
 	"os"
+	"path"
 	"time"
 )
 
-type statInfo struct {
+type StatInfo struct {
 	name         string
 	stSize       int64
 	stBlocks     int64
@@ -16,37 +17,50 @@ type statInfo struct {
 	stLinktarget string
 }
 
-func (s *statInfo) Name() string {
+func (s *StatInfo) Name() string {
 	return s.name
 }
 
-func (s *statInfo) Size() int64 {
+func (s *StatInfo) Size() int64 {
 	return s.stSize
 }
 
-func (s *statInfo) Mode() os.FileMode {
+func (s *StatInfo) Mode() os.FileMode {
 	if s.stIfmt == "S_IFDIR" {
 		return os.ModeDir
 	}
 	return 0
 }
 
-func (s *statInfo) CTime() time.Time {
+func (s *StatInfo) CTime() time.Time {
 	return time.UnixMicro(s.stCtime / 1000)
 }
 
-func (s *statInfo) ModTime() time.Time {
+func (s *StatInfo) ModTime() time.Time {
 	return time.UnixMicro(s.stMtime / 1000)
 }
 
-func (s *statInfo) Sys() interface{} {
+func (s *StatInfo) Sys() interface{} {
 	return s
 }
 
-func (s *statInfo) IsDir() bool {
+func (s *StatInfo) IsDir() bool {
 	return s.stIfmt == "S_IFDIR"
 }
 
-func (s *statInfo) IsLink() bool {
+func (s *StatInfo) IsLink() bool {
 	return s.stIfmt == "S_IFLNK"
+}
+
+func NewDirStatInfo(name string) *StatInfo {
+	return &StatInfo{
+		name:         path.Base(name),
+		stSize:       0,
+		stBlocks:     0,
+		stCtime:      0,
+		stMtime:      0,
+		stNlink:      "",
+		stIfmt:       "S_IFDIR",
+		stLinktarget: "",
+	}
 }
