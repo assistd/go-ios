@@ -44,12 +44,11 @@ func (fs *Fsync) SendFile(b []byte, path string) error {
 	if err != nil {
 		return err
 	}
+	defer fs.CloseFile(fd)
 	_, err = fs.Connection.WriteFile(fd, b)
 	if err != nil {
 		return err
 	}
-
-	defer fs.CloseFile(fd)
 	return nil
 }
 

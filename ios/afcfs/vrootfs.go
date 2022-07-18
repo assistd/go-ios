@@ -36,8 +36,15 @@ func NewVfs(device ios.DeviceEntry) (*VirtualRootFs, error) {
 		mountPoints: make(map[string]*afc.Fsync),
 	}
 	rootFs.Mount(afcMountPath, afcFs)
-	_ = rootFs.mountAppsSandbox()
 	return rootFs, nil
+}
+
+func (fs *VirtualRootFs) umountAppsSandbox() {
+	for name, _ := range fs.mountPoints {
+		if strings.HasPrefix(name, sandboxMountPath) {
+			delete(fs.mountPoints, name)
+		}
+	}
 }
 
 func (fs *VirtualRootFs) mountAppsSandbox() error {
@@ -169,6 +176,8 @@ func (fs *VirtualRootFs) OpenFile(name string, flag int, perm os.FileMode) (afer
 			name = sandboxMountPath
 			fallthrough
 		case sandboxMountPath:
+			fs.umountAppsSandbox()
+			_ = fs.mountAppsSandbox()
 			var names []string
 			for mountPath, _ := range fs.mountPoints {
 				if path.Dir(mountPath) == name {
