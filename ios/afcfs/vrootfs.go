@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/afero"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -109,7 +110,16 @@ func (fs *VirtualRootFs) Unmount(mountPath string) {
 	delete(fs.mountPoints, mountPath)
 }
 
+func winPathToUnix(name string) string {
+	if runtime.GOOS == "windows" {
+		name = strings.ReplaceAll(name, "\\", "/")
+	}
+	return name
+}
+
 func (fs *VirtualRootFs) Create(name string) (afero.File, error) {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return nil, syscall.EPERM
@@ -118,6 +128,8 @@ func (fs *VirtualRootFs) Create(name string) (afero.File, error) {
 }
 
 func (fs *VirtualRootFs) Mkdir(name string, perm os.FileMode) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -127,6 +139,8 @@ func (fs *VirtualRootFs) Mkdir(name string, perm os.FileMode) error {
 }
 
 func (fs *VirtualRootFs) MkdirAll(name string, perm os.FileMode) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -136,11 +150,15 @@ func (fs *VirtualRootFs) MkdirAll(name string, perm os.FileMode) error {
 }
 
 func (fs *VirtualRootFs) Open(name string) (afero.File, error) {
+	name = winPathToUnix(name)
+
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
 // OpenFile see https://github.com/libimobiledevice/ifuse/blob/master/src/ifuse.c#L177
 func (fs *VirtualRootFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		switch name {
@@ -167,6 +185,8 @@ func (fs *VirtualRootFs) OpenFile(name string, flag int, perm os.FileMode) (afer
 }
 
 func (fs *VirtualRootFs) Remove(name string) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -176,6 +196,8 @@ func (fs *VirtualRootFs) Remove(name string) error {
 }
 
 func (fs *VirtualRootFs) RemoveAll(name string) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -185,6 +207,9 @@ func (fs *VirtualRootFs) RemoveAll(name string) error {
 }
 
 func (fs *VirtualRootFs) Rename(oldname, newname string) error {
+	oldname = winPathToUnix(oldname)
+	newname = winPathToUnix(newname)
+
 	mp, point, oldname2 := fs.findMountPoint2(oldname)
 	if mp == nil {
 		return syscall.EPERM
@@ -194,6 +219,8 @@ func (fs *VirtualRootFs) Rename(oldname, newname string) error {
 }
 
 func (fs *VirtualRootFs) Stat(name string) (os.FileInfo, error) {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return afc.NewDirStatInfo(name), nil
@@ -205,6 +232,8 @@ func (fs *VirtualRootFs) Stat(name string) (os.FileInfo, error) {
 func (fs *VirtualRootFs) Name() string { return "iOSVirtualRootFs" }
 
 func (fs *VirtualRootFs) Chmod(name string, mode os.FileMode) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -213,6 +242,8 @@ func (fs *VirtualRootFs) Chmod(name string, mode os.FileMode) error {
 }
 
 func (fs *VirtualRootFs) Chown(name string, uid, gid int) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
@@ -221,6 +252,8 @@ func (fs *VirtualRootFs) Chown(name string, uid, gid int) error {
 }
 
 func (fs *VirtualRootFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	name = winPathToUnix(name)
+
 	mp, newPath := fs.findMountPoint(name)
 	if mp == nil {
 		return syscall.EPERM
