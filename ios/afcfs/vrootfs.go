@@ -61,6 +61,7 @@ func (fs *VirtualRootFs) mountAppsSandbox() error {
 			continue
 		}
 
+		log.Infoln("mount", app.CFBundleIdentifier)
 		fs.Mount(path.Join(sandboxMountPath, app.CFBundleIdentifier), sandboxFs)
 	}
 
@@ -147,6 +148,7 @@ func (fs *VirtualRootFs) OpenFile(name string, flag int, perm os.FileMode) (afer
 			names := []string{afcMountPath, sandboxMountPath}
 			return &VFile{absPath: name, names: names}, nil
 		case sandboxMountPath + "/":
+			name = sandboxMountPath
 			fallthrough
 		case sandboxMountPath:
 			var names []string

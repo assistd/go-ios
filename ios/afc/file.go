@@ -54,16 +54,13 @@ func (f *File) Name() string {
 	return f.absPath
 }
 
+// Readdir must return nil
 func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 	if count > 0 {
 		log.Fatalln("not support count > 0")
 	}
 
-	files, err := f.conn.ReadDir(f.absPath)
-	if err != nil {
-		return
-	}
-
+	files, _ := f.conn.ReadDir(f.absPath)
 	for _, entry := range files {
 		fileInfo, err := f.conn.Stat(path.Join(f.absPath, entry))
 		if err != nil {
@@ -79,8 +76,6 @@ func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 					stIfmt:       "",
 					stLinktarget: "",
 				}
-			} else {
-				return nil, err
 			}
 		}
 		fi = append(fi, fileInfo)
@@ -88,12 +83,13 @@ func (f *File) Readdir(count int) (fi []os.FileInfo, err error) {
 	return
 }
 
+// Readdirnames must return nil
 func (f *File) Readdirnames(count int) (names []string, err error) {
 	if count > 0 {
 		log.Fatalln("not support count > 0")
 	}
 	files, err := f.conn.ReadDir(f.absPath)
-	return files, err
+	return files, nil
 }
 
 func (f *File) Stat() (os.FileInfo, error) {
