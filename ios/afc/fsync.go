@@ -3,16 +3,17 @@ package afc
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
-	"github.com/spf13/afero"
-	_ "github.com/spf13/afero"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/afero"
+	_ "github.com/spf13/afero"
 )
 
 type Fsync struct {
@@ -321,13 +322,13 @@ func (fs *Fsync) Stat(name string) (os.FileInfo, error) {
 }
 
 func (fs *Fsync) Chmod(name string, mode os.FileMode) error {
-	return syscall.EPERM
+	return nil
 }
 
 func (fs *Fsync) Chown(name string, uid, gid int) error {
-	return syscall.EPERM
+	return nil
 }
 
 func (fs *Fsync) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	return syscall.EPERM
+	return nil
 }
