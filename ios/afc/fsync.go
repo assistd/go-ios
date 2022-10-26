@@ -201,7 +201,8 @@ func (fs *Fsync) Push(srcPath, dstPath string) error {
 	}
 	defer f.Close()
 
-	if fileInfo, _ := fs.Stat(dstPath); fileInfo != nil {
+	fileInfo, err := fs.Stat(dstPath)
+	if err == nil {
 		if fileInfo.IsDir() {
 			dstPath = path.Join(dstPath, filepath.Base(srcPath))
 		}
