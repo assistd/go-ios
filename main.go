@@ -106,7 +106,7 @@ Usage:
   ios convert --path=<ipaOrAppFolder> [options]
   ios winfo --path=<test.wzip> [options]
   ios wextract --path=<test.wzip> --item=<file> [options]
-  ios install --path=<ipaOrAppFolder> [options]
+  ios install --path=<ipaOrAppFolder> [--use-installproxy] [options]
   ios uninstall <bundleID> [options]
   ios apps [--system] [--all] [options]
   ios launch <bundleID> [options]
@@ -189,7 +189,9 @@ The commands work as following:
    >                                                                  The --binary flag will dump everything in raw binary without any decoding. 
    ios readpair                                                       Dump detailed information about the pairrecord for a device.
    ios convert --path=<ipaOrAppFolder> [options]                      Convert ipa to conduit file.
-   ios install --path=<ipaOrAppFolder> [options]                      Specify a .app folder or an installable ipa file that will be installed.  
+   ios install --path=<ipaOrAppFolder> [--use-installproxy] [options]  Specify a .app folder or an installable ipa file that will be installed,
+   >                                                                  --use-installproxy will use the installproxy instead of the zipconduit install.
+   >                                                                  Note: zipconduit not support single file size > 4G.
    ios pcap [options] [--pid=<processID>] [--process=<processName>]   Starts a pcap dump of network traffic, use --pid or --process to filter specific processes.
    ios apps [--system] [--all]                                        Retrieves a list of installed applications. --system prints out preinstalled system apps. --all prints all apps, including system, user, and hidden apps.
    ios launch <bundleID>                                              Launch app with the bundleID on the device. Get your bundle ID from the apps command.
@@ -383,7 +385,8 @@ The commands work as following:
 	b, _ = arguments.Bool("install")
 	if b {
 		path, _ := arguments.String("--path")
-		installApp(device, path)
+		useInstallProxy, _ := arguments.Bool("--use-installproxy")
+		installApp(device, path, useInstallProxy)
 		return
 	}
 
@@ -1030,13 +1033,20 @@ func listMountedImages(device ios.DeviceEntry) {
 	}
 }
 
-func installApp(device ios.DeviceEntry, path string) {
+func installApp(device ios.DeviceEntry, path string, useInstallproxy bool) {
 	log.WithFields(
 		log.Fields{"appPath": path, "device": device.Properties.SerialNumber}).Info("installing")
-	conn, err := zipconduit.New(device)
-	exitIfError("failed connecting to zipconduit, dev image installed?", err)
-	err = conn.SendFile(path)
-	exitIfError("failed writing", err)
+	if !useInstallproxy {
+		conn, err := zipconduit.New(device)
+		exitIfError("failed connecting to zipconduit, dev image installed?", err)
+		err = conn.SendFile(path)
+		exitIfError("failed writing", err)
+	} else {
+		svc, err := installationproxy.New(device)
+		exitIfError("failed connecting to installationproxy?", err)
+		err = svc.Install(device, path)
+		exitIfError("failed writing", err)
+	}
 }
 
 func uninstallApp(device ios.DeviceEntry, bundleId string) {

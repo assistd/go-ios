@@ -1,11 +1,14 @@
 package ios
 
 import (
+	"archive/zip"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/Masterminds/semver"
+	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -114,4 +117,56 @@ func FixWindowsPaths(path string) string {
 		path = strings.Split(path, ":/")[1]
 	}
 	return path
+}
+
+func ParsePlistInfo(appPath string) (map[string]interface{}, error) {
+	file, err := os.Open(appPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := zip.NewReader(file, stat.Size())
+	if err != nil {
+		return nil, err
+	}
+
+	reInfoPlist := regexp.MustCompile(`Payload/[^/]+/Info\.plist`)
+
+	var plistFile *zip.File
+	for _, f := range reader.File {
+		if plistFile == nil {
+			switch {
+			case reInfoPlist.MatchString(f.Name):
+				plistFile = f
+			}
+		} else {
+			break
+		}
+	}
+
+	if plistFile == nil {
+		return nil, errors.New("info.plist not found")
+	}
+	rc, err := plistFile.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	pcontent, err := ioutil.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	pmap := make(map[string]interface{})
+	_, err = plist.Unmarshal(pcontent, pmap)
+	if err != nil {
+		return nil, err
+	}
+	return pmap, nil
 }

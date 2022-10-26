@@ -3,13 +3,20 @@ package installationproxy
 import (
 	"bytes"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-
 	ios "github.com/danielpaulus/go-ios/ios"
+	"github.com/danielpaulus/go-ios/ios/afc"
+	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 )
 
 const serviceName = "com.apple.mobile.installation_proxy"
+
+type ProxyCmd string
+
+const (
+	Install   ProxyCmd = "Install"
+	UnInstall ProxyCmd = "Uninstall"
+)
 
 type Connection struct {
 	deviceConn ios.DeviceConnectionInterface
@@ -72,10 +79,73 @@ func (conn *Connection) browseApps(request interface{}) ([]AppInfo, error) {
 	return appinfos, nil
 }
 
+func (c *Connection) Install(device ios.DeviceEntry, path string) error {
+	plistInfo, err := ios.ParsePlistInfo(path)
+	if err != nil {
+		return err
+	}
+	bundleIdInfo, ok := plistInfo["CFBundleIdentifier"]
+	if !ok || bundleIdInfo == nil {
+		return fmt.Errorf("cannot find CFBundleIdentifier in Info.plist")
+	}
+	bundleId, _ := bundleIdInfo.(string)
+
+	afcService, err := afc.New(device)
+	log.Infof("Copying %v to device...", path)
+
+	ipaTmpDir := "PublicStaging"
+	if _, err := afcService.Stat(ipaTmpDir); err != nil {
+		afcService.MakeDir(ipaTmpDir)
+	}
+	targetPath := fmt.Sprintf("%v/%v.ipa", ipaTmpDir, bundleId)
+	err = afcService.Push(path, targetPath)
+	if err != nil {
+		return err
+	}
+	log.Infof("Done.")
+	return c.install(bundleId, targetPath)
+}
+
+func (c *Connection) install(bundleId, path string) error {
+	options := map[string]interface{}{
+		"CFBundleIdentifier": bundleId,
+	}
+	installCommand := map[string]interface{}{
+		"Command":       Install,
+		"ClientOptions": options,
+		"PackagePath":   path,
+	}
+	b, err := c.plistCodec.Encode(installCommand)
+	if err != nil {
+		return err
+	}
+	err = c.deviceConn.Send(b)
+	if err != nil {
+		return err
+	}
+	for {
+		response, err := c.plistCodec.Decode(c.deviceConn.Reader())
+		if err != nil {
+			return err
+		}
+		dict, err := ios.ParsePlist(response)
+		if err != nil {
+			return err
+		}
+		done, err := checkFinished(dict, Install)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
 func (c *Connection) Uninstall(bundleId string) error {
 	options := map[string]interface{}{}
 	uninstallCommand := map[string]interface{}{
-		"Command":               "Uninstall",
+		"Command":               UnInstall,
 		"ApplicationIdentifier": bundleId,
 		"ClientOptions":         options,
 	}
@@ -96,7 +166,7 @@ func (c *Connection) Uninstall(bundleId string) error {
 		if err != nil {
 			return err
 		}
-		done, err := checkFinished(dict)
+		done, err := checkFinished(dict, UnInstall)
 		if err != nil {
 			return err
 		}
@@ -106,16 +176,16 @@ func (c *Connection) Uninstall(bundleId string) error {
 	}
 }
 
-func checkFinished(dict map[string]interface{}) (bool, error) {
+func checkFinished(dict map[string]interface{}, c ProxyCmd) (bool, error) {
 	if val, ok := dict["Error"]; ok {
-		return true, fmt.Errorf("received uninstall error: %v", val)
+		return true, fmt.Errorf("received %v error: %v", c, val)
 	}
 	if val, ok := dict["Status"]; ok {
 		if "Complete" == val {
-			log.Info("done uninstalling")
+			log.Infof("done %v", c)
 			return true, nil
 		}
-		log.Infof("uninstall status: %s", val)
+		log.Infof("%v status: %s", c, val)
 		return false, nil
 	}
 	return true, fmt.Errorf("unknown status update: %+v", dict)
@@ -160,7 +230,7 @@ func browseApps(applicationType string, showLaunchProhibitedApps bool) map[strin
 		clientOptions["ApplicationType"] = applicationType
 	}
 	if showLaunchProhibitedApps {
-                clientOptions["ShowLaunchProhibitedApps"] = true
+		clientOptions["ShowLaunchProhibitedApps"] = true
 	}
 	return map[string]interface{}{"ClientOptions": clientOptions, "Command": "Browse"}
 }
