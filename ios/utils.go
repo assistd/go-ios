@@ -1,11 +1,15 @@
 package ios
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/Masterminds/semver"
+	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -114,4 +118,76 @@ func FixWindowsPaths(path string) string {
 		path = strings.Split(path, ":/")[1]
 	}
 	return path
+}
+
+type InfoPlist struct {
+	CFBundleName         string `plist:"CFBundleName"`
+	CFBundleDisplayName  string `plist:"CFBundleDisplayName"`
+	CFBundleVersion      string `plist:"CFBundleVersion"`
+	CFBundleShortVersion string `plist:"CFBundleShortVersionString"`
+	CFBundleIdentifier   string `plist:"CFBundleIdentifier"`
+}
+
+func getFileInfoFromIpa(ipaPath string, r *regexp.Regexp) ([]byte, error) {
+	if r == nil {
+		return nil, errors.New("reInfoPlist is nil")
+	}
+	ipaFile, err := os.Open(ipaPath)
+	if err != nil {
+		return nil, err
+	}
+	defer ipaFile.Close()
+
+	stat, err := ipaFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := zip.NewReader(ipaFile, stat.Size())
+	if err != nil {
+		return nil, err
+	}
+
+	var file *zip.File
+	for _, f := range reader.File {
+		if file == nil {
+			switch {
+			case r.MatchString(f.Name):
+				file = f
+			}
+		} else {
+			break
+		}
+	}
+
+	if file == nil {
+		return nil, errors.New("file not found")
+	}
+	rc, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	buf, err := ioutil.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func GetInfoPlistFromIpa(ipaPath string) (*InfoPlist, error) {
+	r := regexp.MustCompile(`Payload/[^/]+/Info\.plist`)
+	infoPlistFile, err := getFileInfoFromIpa(ipaPath, r)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("get Info.plist from %v", ipaPath)
+	p := InfoPlist{}
+	decoder := plist.NewDecoder(bytes.NewReader(infoPlistFile))
+	if err := decoder.Decode(p); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
