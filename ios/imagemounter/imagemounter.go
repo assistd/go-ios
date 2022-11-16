@@ -1,6 +1,7 @@
 package imagemounter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -246,6 +247,11 @@ func (conn *Connection) hangUp() error {
 // looks for the image for the device version in baseDir. If it is not present it will download it from
 // github and install.
 func FixDevImage(device ios.DeviceEntry, baseDir string) error {
+	return FixDevImageWithCtx(nil, device, baseDir)
+}
+
+//FixDevImageWithCtx checks with ctx
+func FixDevImageWithCtx(ctx context.Context, device ios.DeviceEntry, baseDir string) error {
 	b, err := IsImageMount(device)
 	if b {
 		log.Warn("there is already a developer image mounted, reboot the device if you want to remove it. aborting.")
@@ -267,6 +273,13 @@ func FixDevImage(device ios.DeviceEntry, baseDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed connecting to image mounter: %v", err)
 	}
+	go func() {
+		if ctx != nil {
+			<-ctx.Done()
+			conn.Close()
+		}
+	}()
+
 	return conn.MountImage(imagePath)
 }
 
