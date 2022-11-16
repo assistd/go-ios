@@ -1044,7 +1044,7 @@ func installApp(device ios.DeviceEntry, path string, useInstallproxy bool) {
 	} else {
 		svc, err := installationproxy.New(device)
 		exitIfError("failed connecting to installationproxy?", err)
-		err = svc.Install(device, path)
+		err = svc.Install(device, path, "")
 		exitIfError("failed writing", err)
 	}
 }

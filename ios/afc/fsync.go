@@ -190,6 +190,10 @@ func (fs *Fsync) Pull(srcPath, dstPath string) error {
 }
 
 func (fs *Fsync) Push(srcPath, dstPath string) error {
+	return fs.PushWithWriter(srcPath, dstPath, nil)
+}
+
+func (fs *Fsync) PushWithWriter(srcPath, dstPath string, writer io.Writer) error {
 	ret, _ := ios.PathExists(srcPath)
 	if !ret {
 		return fmt.Errorf("%s: no such file", srcPath)
@@ -223,6 +227,9 @@ func (fs *Fsync) Push(srcPath, dstPath string) error {
 		}
 		if n == 0 {
 			break
+		}
+		if writer != nil {
+			writer.Write(chunk[0:n])
 		}
 
 		data := make([]byte, 8)

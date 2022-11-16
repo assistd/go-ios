@@ -3,6 +3,7 @@ package ios
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	plist "howett.net/plist"
@@ -183,11 +185,68 @@ func GetInfoPlistFromIpa(ipaPath string) (*InfoPlist, error) {
 		return nil, err
 	}
 
-	log.Info("get Info.plist from %v", ipaPath)
-	p := InfoPlist{}
+	p := new(InfoPlist)
 	decoder := plist.NewDecoder(bytes.NewReader(infoPlistFile))
 	if err := decoder.Decode(p); err != nil {
 		return nil, err
 	}
-	return &p, nil
+	return p, nil
+}
+
+const (
+	InstallByConduitZip = "InstallByConduitZip"
+	InstallByPushDir    = "InstallByPushDir"
+	DefRefrashRate      = time.Second
+)
+
+type InstallEvent struct {
+	Stage   string `json:"stage"`
+	Percent int    `json:"percent"`
+	Current int64  `json:"current"`
+	Total   int64  `json:"total"`
+	Speed   int64  `json:"speed"`
+}
+
+type PushListener struct {
+	currentSize   uint64
+	lastTotalSize uint64
+	IpaFileSize   uint64
+	OverallSize   uint64
+}
+
+func (u *PushListener) Write(b []byte) (n int, err error) {
+	u.currentSize = u.currentSize + uint64(len(b))
+	u.lastTotalSize = u.lastTotalSize + uint64(len(b))
+	return len(b), nil
+}
+
+func (u *PushListener) Start(ctx context.Context, notify func(event InstallEvent)) {
+	u.currentSize = 0
+
+	refresh := func(finish bool) {
+		f := float64(u.currentSize) * float64((time.Second.Milliseconds())/DefRefrashRate.Milliseconds())
+		percent := float64(u.lastTotalSize) / float64(u.OverallSize)
+		if finish {
+			percent = 1
+		}
+
+		notify(InstallEvent{
+			Stage:   InstallByPushDir,
+			Current: int64(float64(u.IpaFileSize) * percent),
+			Total:   int64(u.IpaFileSize),
+			Speed:   int64(f),
+			Percent: int(percent * 100),
+		})
+		u.currentSize = 0
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			refresh(true)
+			return
+		case <-time.After(DefRefrashRate):
+			refresh(false)
+		}
+	}
 }

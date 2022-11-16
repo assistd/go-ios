@@ -33,7 +33,7 @@ type installoptions struct {
 
 const signingError = "ApplicationVerificationFailed"
 
-func evaluateProgress(progressUpdate map[string]interface{}) (bool, int, string, error) {
+func EvaluateProgress(progressUpdate map[string]interface{}) (bool, int, string, error) {
 	//done, percent, status
 	statusIntf, ok := progressUpdate["Status"]
 	if ok {

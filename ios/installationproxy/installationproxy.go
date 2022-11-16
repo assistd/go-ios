@@ -2,11 +2,13 @@ package installationproxy
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	ios "github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/afc"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
+	"os"
 )
 
 const serviceName = "com.apple.mobile.installation_proxy"
@@ -79,17 +81,31 @@ func (conn *Connection) browseApps(request interface{}) ([]AppInfo, error) {
 	return appinfos, nil
 }
 
-func (c *Connection) Install(device ios.DeviceEntry, path string) error {
-	infoPlist, err := ios.GetInfoPlistFromIpa(path)
-	if err != nil {
-		return err
-	}
+func (c *Connection) Install(device ios.DeviceEntry, path string, bundleId string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	err := c.InstallWithCtx(ctx, device, path, bundleId, func(event ios.InstallEvent) {
+		if event.Stage == ios.InstallByPushDir {
+			log.Infof("Copying %v to device... %d / 100", path, event.Percent)
+		}
+	})
+	cancel()
+	return err
+}
 
-	if len(infoPlist.CFBundleIdentifier) == 0 {
-		return fmt.Errorf("cannot find CFBundleIdentifier in Info.plist")
-	}
+func (c *Connection) InstallWithCtx(ctx context.Context, device ios.DeviceEntry, path string, bundleId string,
+	notify func(event ios.InstallEvent)) error {
+	if len(bundleId) == 0 {
+		infoPlist, err := ios.GetInfoPlistFromIpa(path)
+		if err != nil {
+			return err
+		}
 
-	bundleId := infoPlist.CFBundleIdentifier
+		if len(infoPlist.CFBundleIdentifier) == 0 {
+			return fmt.Errorf("cannot find CFBundleIdentifier in Info.plist")
+		}
+
+		bundleId = infoPlist.CFBundleIdentifier
+	}
 
 	afcService, err := afc.New(device)
 	log.Infof("Copying %v to device...", path)
@@ -99,15 +115,41 @@ func (c *Connection) Install(device ios.DeviceEntry, path string) error {
 		afcService.MakeDir(ipaTmpDir)
 	}
 	targetPath := fmt.Sprintf("%v/%v.ipa", ipaTmpDir, bundleId)
-	err = afcService.Push(path, targetPath)
-	if err != nil {
-		return err
+	go func() {
+		<-ctx.Done()
+		afcService.Close()
+	}()
+	if notify != nil {
+		ctx2, cancel := context.WithCancel(ctx)
+		ipaFile, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		ipaFileSize := uint64(ipaFile.Size())
+		listener := ios.PushListener{
+			OverallSize: ipaFileSize,
+			IpaFileSize: ipaFileSize,
+		}
+		go listener.Start(ctx2, notify)
+
+		err = afcService.PushWithWriter(path, targetPath, &listener)
+		if err != nil {
+			return err
+		}
+		if cancel != nil {
+			cancel()
+		}
+	} else {
+		err = afcService.Push(path, targetPath)
+		if err != nil {
+			return err
+		}
 	}
 	log.Infof("Done.")
-	return c.install(bundleId, targetPath)
+	return c.install(ctx, bundleId, targetPath, notify)
 }
 
-func (c *Connection) install(bundleId, path string) error {
+func (c *Connection) install(ctx context.Context, bundleId, path string, notify func(event ios.InstallEvent)) error {
 	options := map[string]interface{}{
 		"CFBundleIdentifier": bundleId,
 	}
@@ -124,6 +166,10 @@ func (c *Connection) install(bundleId, path string) error {
 	if err != nil {
 		return err
 	}
+	go func() {
+		<-ctx.Done()
+		c.deviceConn.Close()
+	}()
 	for {
 		response, err := c.plistCodec.Decode(c.deviceConn.Reader())
 		if err != nil {
@@ -134,6 +180,14 @@ func (c *Connection) install(bundleId, path string) error {
 			return err
 		}
 		done, err := checkFinished(dict, CmdInstall)
+		if notify != nil {
+			if statusIntf, ok := dict["Status"]; ok {
+				percentIntf, ok := dict["PercentComplete"]
+				if ok {
+					notify(ios.InstallEvent{Stage: statusIntf.(string), Percent: int(percentIntf.(uint64))})
+				}
+			}
+		}
 		if err != nil {
 			return err
 		}
