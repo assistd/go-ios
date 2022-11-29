@@ -21,6 +21,15 @@ func (p *ProcessControl) LaunchApp(bundleID string) (uint64, error) {
 	return p.StartProcess(bundleID, map[string]interface{}{}, []interface{}{}, options)
 }
 
+//LaunchAppWithActivate launches the app with the given bundleID on the given device.LaunchApp, and active it.
+//It returns the PID of the created app process.
+func (p *ProcessControl) LaunchAppWithActivate(bundleID string) (uint64, error) {
+	options := map[string]interface{}{}
+	options["StartSuspendedKey"] = uint64(0)
+	options["ActivateSuspended"] = uint64(1)
+	return p.StartProcess(bundleID, map[string]interface{}{}, []interface{}{}, options)
+}
+
 func (p *ProcessControl) Close() {
 	p.conn.Close()
 }
