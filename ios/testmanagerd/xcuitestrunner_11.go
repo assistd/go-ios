@@ -2,11 +2,12 @@ package testmanagerd
 
 import (
 	"context"
+	"strings"
+
 	"github.com/danielpaulus/go-ios/ios"
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/instruments"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 func RunXCUIWithBundleIds11Ctx(
@@ -16,9 +17,11 @@ func RunXCUIWithBundleIds11Ctx(
 	xctestConfigFileName string,
 	device ios.DeviceEntry,
 	args []string,
-	env []string) error {
+	env []string,
+	mode Mode,
+) error {
 	log.Debugf("set up xcuitest")
-	testSessionId, xctestConfigPath, testConfig, testInfo, err := setupXcuiTest(device, bundleID, testRunnerBundleID, xctestConfigFileName)
+	testSessionId, xctestConfigPath, testConfig, testInfo, err := setupXcuiTest(device, bundleID, testRunnerBundleID, xctestConfigFileName, mode)
 	if err != nil {
 		return err
 	}

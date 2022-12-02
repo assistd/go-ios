@@ -112,7 +112,7 @@ Usage:
   ios launch <bundleID> [options]
   ios kill (<bundleID> | --pid=<processID> | --process=<processName>) [options]
   ios runtest <bundleID> [options]
-  ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--arg=<a>]... [--env=<e>]... [options]
+  ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--doc] [--arg=<a>]... [--env=<e>]... [options]
   ios ax [options]
   ios debug [options] [--stop-at-entry] <app_path>
   ios fsync (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
@@ -867,6 +867,7 @@ func runWdaCommand(device ios.DeviceEntry, arguments docopt.Opts) bool {
 		bundleID, _ := arguments.String("--bundleid")
 		testbundleID, _ := arguments.String("--testrunnerbundleid")
 		xctestconfig, _ := arguments.String("--xctestconfig")
+		doc, _ := arguments.Bool("--doc")
 		wdaargs := arguments["--arg"].([]string)
 		wdaenv := arguments["--env"].([]string)
 
@@ -880,7 +881,11 @@ func runWdaCommand(device ios.DeviceEntry, arguments docopt.Opts) bool {
 		}
 		log.WithFields(log.Fields{"bundleid": bundleID, "testbundleid": testbundleID, "xctestconfig": xctestconfig}).Info("Running wda")
 		go func() {
-			err := testmanagerd.RunXCUIWithBundleIdsCtx(context.Background(), bundleID, testbundleID, xctestconfig, device, wdaargs, wdaenv)
+			mode := testmanagerd.ByNormal
+			if doc {
+				mode = testmanagerd.ByDocument
+			}
+			err := testmanagerd.RunXCUIWithBundleIdsCtx(context.Background(), bundleID, testbundleID, xctestconfig, device, wdaargs, wdaenv, mode)
 
 			if err != nil {
 				log.WithFields(log.Fields{"error": err}).Fatal("Failed running WDA")
