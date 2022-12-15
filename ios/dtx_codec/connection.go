@@ -196,7 +196,8 @@ func (dtxConn *Connection) RequestChannelIdentifier(identifier string, messageDi
 		log.WithFields(log.Fields{"channel_id": identifier, "error": err}).Error("failed requesting channel")
 	}
 	log.WithFields(log.Fields{"channel_id": identifier}).Debug("Channel open")
-	channel := &Channel{channelCode: code, channelName: identifier, messageIdentifier: 1, connection: dtxConn, messageDispatcher: messageDispatcher, responseWaiters: map[int]chan Message{}, defragmenters: map[int]*FragmentDecoder{}, timeout: 5 * time.Second}
+	// https://github.com/assistd/go-ios/issues/33
+	channel := &Channel{channelCode: code, channelName: identifier, messageIdentifier: 1, connection: dtxConn, messageDispatcher: messageDispatcher, responseWaiters: map[int]chan Message{}, defragmenters: map[int]*FragmentDecoder{}, timeout: 30 * time.Second}
 	dtxConn.activeChannels.Store(code, channel)
 	for _, opt := range opts {
 		opt(channel)
