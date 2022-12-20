@@ -344,3 +344,45 @@ func (fs *Fsync) Chown(name string, uid, gid int) error {
 func (fs *Fsync) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return nil
 }
+
+func (fs *Fsync) RmTree(path string) error {
+	info, err := fs.Connection.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		files, err := fs.Connection.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		for _, f := range files {
+			filePath := path + "/" + f
+			info, err = fs.Connection.Stat(filePath)
+			if err != nil {
+				log.Errorf("stat %v error: %v", f, err)
+				continue
+			}
+			if info.IsDir() {
+				fs.RmTree(filePath)
+				if err != nil {
+					return err
+				}
+			} else {
+				err = fs.Connection.RemovePath(filePath)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		err = fs.Connection.RemovePath(path)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = fs.Connection.RemovePath(path)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
