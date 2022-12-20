@@ -776,6 +776,14 @@ The commands work as following:
 			return
 		}
 
+		b, _ = arguments.Bool("rmtree")
+		if b {
+			path, _ := arguments.String("--path")
+			err := afcService.RmTree(path)
+			exitIfError("fsync: rmtree view failed", err)
+			return
+		}
+
 		b, _ = arguments.Bool("mkdir")
 		if b {
 			path, _ := arguments.String("--path")
