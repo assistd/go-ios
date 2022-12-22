@@ -101,6 +101,8 @@ func startTestRunner11(pControl *instruments.ProcessControl, xctestConfigPath st
 		args = append(args, arg)
 	}
 	env := map[string]interface{}{
+		// https://github.com/assistd/go-ios/issues/28
+		"DYLD_INSERT_LIBRARIES": "/Developer/usr/lib/libMainThreadChecker.dylib",
 
 		"XCTestBundlePath":            testBundlePath,
 		"XCTestConfigurationFilePath": xctestConfigPath,
