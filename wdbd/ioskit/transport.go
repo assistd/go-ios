@@ -42,10 +42,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 	for {
 		request, err := muxOnUnixSocket.ReadMessage()
 		if err != nil {
-			inConn := muxOnUnixSocket.ReleaseDeviceConnection()
-			if inConn != nil {
-				inConn.Close()
-			}
+			muxOnUnixSocket.Close()
 			log.Errorln("transport: failed reading UsbMuxMessage", err)
 			return
 		}
@@ -54,6 +51,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 		decoder := plist.NewDecoder(bytes.NewReader(request.Payload))
 		err = decoder.Decode(&decodedRequest)
 		if err != nil {
+			muxOnUnixSocket.Close()
 			log.Fatalln("transport: failed decoding MuxMessage", request, err)
 			return
 		}
@@ -62,60 +60,29 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 
 		messageType := decodedRequest["MessageType"]
 		switch messageType {
+		case MuxMessageTypeListDevices:
+			// NOTE: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
+			t.handleListDevices(muxOnUnixSocket)
 		case MuxMessageTypeListen:
 			t.handleListen(muxOnUnixSocket)
 			return
-		case MuxMessageTypeConnect:
-			deviceId := decodedRequest["DeviceID"].(uint64)
-			remoteDevice, err := globalUsbmuxd.GetRemoteDeviceById(int(deviceId))
-			if err != nil {
-				log.Fatalln("unknown serial: ", err)
-			}
 
-			if muxToDevice == nil {
-				devStream, err := remoteDevice.NewConn(context.Background())
-				if err != nil {
-					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
-					muxOnUnixSocket.Close()
-					return
-				}
-
-				muxToDevice = &IosMuxConn{
-					conn: devStream,
-				}
-			}
-
-			log.Infof("CONNECT: replace DeviceId: %v -> %v", decodedRequest, remoteDevice.GetIOSDeviceId())
-			decodedRequest["DeviceID"] = remoteDevice.GetIOSDeviceId()
-			err = muxToDevice.Send(decodedRequest)
-			if err != nil {
-				log.Errorf("transport: failed write to device: %v", err)
-				muxOnUnixSocket.Close()
-				break
-			}
-			t.handleConnect(context.Background(), muxToDevice.conn)
-			return
-		case MuxMessageTypeListDevices:
-			//TODO: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
-			t.handleListDevices(muxOnUnixSocket)
 		case MuxMessageTypeListListeners:
-			log.Fatalf("not supported %v yet", MuxMessageTypeListListeners)
+			fallthrough
 		case MuxMessageTypeReadBUID:
-			log.Fatalf("not supported %v yet", MuxMessageTypeReadBUID)
+			fallthrough
 		case MuxMessageTypeReadPairRecord:
 			fallthrough
 		case MuxMessageTypeSavePairRecord:
 			fallthrough
 		case MuxMessageTypeDeletePairRecord:
 			// readpairrecord.go#ReadPair
-			pairId := decodedRequest["PairRecordID"].(string)
-			remoteDevice, err := globalUsbmuxd.GetRemoteDevice(pairId)
-			if err != nil {
-				log.Fatalln("unknown serial: ", err)
-			}
-
+			// pairId := decodedRequest["PairRecordID"].(string)
+			fallthrough
+		case MuxMessageTypeConnect:
+			remoteDevice := globalUsbmuxd.GetRemoteDevice()
 			if muxToDevice == nil {
-				devStream, err := remoteDevice.NewConn(context.Background())
+				devStream, err := remoteDevice.NewConn(nil)
 				if err != nil {
 					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
 					muxOnUnixSocket.Close()
@@ -127,21 +94,14 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 				}
 			}
 
-			err = muxToDevice.SendMuxMessage(request)
+			err = muxToDevice.Send(decodedRequest)
 			if err != nil {
 				log.Errorf("transport: failed write to device: %v", err)
 				muxOnUnixSocket.Close()
 				break
 			}
-
-			response, err := muxToDevice.ReadMessage()
-			err = muxOnUnixSocket.SendMuxMessage(response)
-			if err != nil {
-				log.Errorf("transport: failed write to client: %v", err)
-				// 重复close应该没啥问题
-				muxOnUnixSocket.Close()
-				break
-			}
+			t.forward(context.Background(), muxToDevice.conn)
+			return
 		default:
 			log.Fatalf("Unexpected command %s received!", messageType)
 		}
@@ -149,21 +109,23 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 }
 
 func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
-	list := make([]ios.DeviceEntry, len(globalUsbmuxd.registry.Devices()))
-	for i, d := range globalUsbmuxd.registry.Devices() {
-		list[i] = ios.DeviceEntry(d)
+	d, err := globalUsbmuxd.remote.ListDevices()
+	var list []ios.DeviceEntry
+	if err == nil {
+		list = make([]ios.DeviceEntry, 1)
+		list[0] = ios.DeviceEntry(d)
 	}
 
 	deviceList := ios.DeviceList{
 		DeviceList: list,
 	}
-	err := muxOnUnixSocket.Send(deviceList)
+	err = muxOnUnixSocket.Send(deviceList)
 	if err != nil {
-		log.Errorln("transport: LISTEN: write failed:", err)
+		log.Errorln("transport: list-device write to client failed:", err)
 	}
 }
 
-func (t *Transport) handleConnect(ctx context.Context, devConn io.ReadWriter) {
+func (t *Transport) forward(ctx context.Context, devConn io.ReadWriter) {
 	closed := false
 	ctx2, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -176,7 +138,7 @@ func (t *Transport) handleConnect(ctx context.Context, devConn io.ReadWriter) {
 			closed = true
 		}
 
-		log.Errorf("transport: CONNECT: forward: close clientConn <-- deviceConn")
+		log.Errorf("transport: forward: close clientConn <-- deviceConn")
 		wg.Done()
 	}()
 
@@ -203,13 +165,10 @@ func (t *Transport) handleConnect(ctx context.Context, devConn io.ReadWriter) {
 
 func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 	cleanup := func() {
-		d := muxOnUnixSocket.ReleaseDeviceConnection()
-		if d != nil {
-			d.Close()
-		}
+		muxOnUnixSocket.Close()
 	}
 
-	onAdd := func(ctx context.Context, d wdbd.DeviceEntry) {
+	onAdd := func(ctx context.Context, d DeviceEntry) {
 		d.MessageType = ListenMessageAttached
 		err := muxOnUnixSocket.Send(d)
 		if err != nil {
@@ -218,7 +177,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		}
 	}
 
-	onRemove := func(ctx context.Context, d wdbd.DeviceEntry) {
+	onRemove := func(ctx context.Context, d DeviceEntry) {
 		d.MessageType = ListenMessageDetached
 		err := muxOnUnixSocket.Send(d)
 		if err != nil {
@@ -241,11 +200,13 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 
 	// trigger onAdd/onRemove
-	for _, d := range globalUsbmuxd.registry.Devices() {
+	d, err := globalUsbmuxd.remote.ListDevices()
+	if err == nil {
 		log.Infof("--> %+v", d)
 		onAdd(nil, d)
 	}
-	unListen := globalUsbmuxd.registry.Listen(wdbd.NewDeviceListener(onAdd, onRemove))
+
+	unListen := globalUsbmuxd.remote.registry.Listen(NewDeviceListener(onAdd, onRemove))
 	defer unListen()
 	defer cleanup()
 

@@ -2,7 +2,6 @@ package ioskit
 
 import (
 	"fmt"
-	"github.com/danielpaulus/go-ios/wdbd"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
@@ -16,23 +15,18 @@ var (
 )
 
 type Usbmuxd struct {
-	registry   *wdbd.Registry
 	socket     string
+	remote     *RemoteDevice // serial -> RemoteDevice
 	transports map[*Transport]struct{}
 	mutex      sync.Mutex
-	deviceId   int
-	muxMap     map[string]*RemoteDevice // addr -> RemoteDevice
-	serialMap  map[string]*RemoteDevice // serial -> RemoteDevice
 }
 
 // NewUsbmuxd create an Usbmuxd instance
-func NewUsbmuxd(socket string) *Usbmuxd {
+func NewUsbmuxd(socket string, device *RemoteDevice) *Usbmuxd {
 	return &Usbmuxd{
-		registry:   wdbd.NewRegistry(),
 		socket:     socket,
 		transports: make(map[*Transport]struct{}),
-		muxMap:     make(map[string]*RemoteDevice),
-		serialMap:  make(map[string]*RemoteDevice),
+		remote:     device,
 	}
 }
 
@@ -52,44 +46,8 @@ func (a *Usbmuxd) Kick() {
 	}
 }
 
-func (a *Usbmuxd) listAll() string {
-	var out string
-	for serial, proxy := range a.muxMap {
-		out += fmt.Sprintf("%s:%s\n", serial, proxy)
-	}
-
-	return out
-}
-
-func (a *Usbmuxd) Add(device *RemoteDevice) error {
-	key := fmt.Sprintf("%s", device.Addr)
-	a.muxMap[key] = device
-	a.serialMap[device.Serial] = device
-	return nil
-}
-
-func (a *Usbmuxd) Remove(device RemoteDevice) error {
-	key := fmt.Sprintf("%s", device.Addr)
-	if _, ok := a.muxMap[key]; ok {
-		delete(a.muxMap, key)
-	}
-
-	return nil
-}
-
-func (a *Usbmuxd) GetRemoteDevice(serial string) (*RemoteDevice, error) {
-	if d, ok := a.serialMap[serial]; ok {
-		return d, nil
-	}
-	return nil, fmt.Errorf("device not found: %v", serial)
-}
-
-func (a *Usbmuxd) GetRemoteDeviceById(deviceId int) (*RemoteDevice, error) {
-	entry, err := a.registry.Device(deviceId)
-	if err != nil {
-		return nil, err
-	}
-	return a.GetRemoteDevice(entry.Properties.SerialNumber)
+func (a *Usbmuxd) GetRemoteDevice() *RemoteDevice {
+	return a.remote
 }
 
 // Run serve a tcp server, and do the message switching between remote usbmuxd and local one
