@@ -13,7 +13,7 @@ import (
 type IosMuxConn struct {
 	//tag will be incremented for every message, so responses can be correlated to requests
 	tag  uint32
-	conn io.ReadWriter
+	conn io.ReadWriteCloser
 }
 
 func (muxConn *IosMuxConn) ReadMessage() (ios.UsbMuxMessage, error) {
@@ -98,4 +98,8 @@ func (muxConn *IosMuxConn) decode() (ios.UsbMuxMessage, error) {
 	log.Debug("UsbMux Receive on ", &muxConn.conn)
 
 	return ios.UsbMuxMessage{Header: muxHeader, Payload: payloadBytes}, nil
+}
+
+func (muxConn *IosMuxConn) Close() {
+	muxConn.conn.Close()
 }

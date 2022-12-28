@@ -3,6 +3,7 @@ package ioskit
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
@@ -36,8 +37,22 @@ func (t *Transport) HandleLoop() {
 	//ctx, cancel := context.WithCancel(context.Background())
 }
 
+func sendRequest(conn net.Conn, message ios.UsbMuxMessage) error {
+	err := binary.Write(conn, binary.LittleEndian, message.Header)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Write(message.Payload)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
-	var muxToDevice *IosMuxConn
+	var muxToDevice net.Conn
 
 	for {
 		request, err := muxOnUnixSocket.ReadMessage()
@@ -88,19 +103,17 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 					muxOnUnixSocket.Close()
 					return
 				}
-
-				muxToDevice = &IosMuxConn{
-					conn: devStream,
-				}
+				muxToDevice = devStream
 			}
 
-			err = muxToDevice.Send(decodedRequest)
+			err = sendRequest(muxToDevice, request)
 			if err != nil {
 				log.Errorf("transport: failed write to device: %v", err)
 				muxOnUnixSocket.Close()
-				break
+				muxToDevice.Close()
+				return
 			}
-			t.forward(context.Background(), muxToDevice.conn)
+			t.forward(context.Background(), muxToDevice)
 			return
 		default:
 			log.Fatalf("Unexpected command %s received!", messageType)
