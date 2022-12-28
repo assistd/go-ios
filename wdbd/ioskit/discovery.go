@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
+	"net"
 	"sync"
 	"time"
 )
@@ -47,7 +48,11 @@ func attachedMessageToDevice(msg ios.AttachedMessage) ios.DeviceEntry {
 
 func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, interval time.Duration) error {
 	for {
-		deviceConn, err := ios.NewDeviceConnection(a.Addr)
+		c, err := net.Dial(a.Network, a.Addr)
+		if err != nil {
+			return err
+		}
+		deviceConn := ios.NewDeviceConnectionWithConn(c)
 		if err != nil {
 			log.Errorf("could not connect to %s with err %+v", a.Addr, err)
 			return fmt.Errorf("could not connect to %s with err %v", a.Addr, err)
