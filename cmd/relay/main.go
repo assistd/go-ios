@@ -28,9 +28,11 @@ func tcp_to_unix(tcp, unix string) error {
 		client, err := net.Dial("tcp", tcp)
 		go func() {
 			io.Copy(client, conn)
+			client.Close()
 		}()
 		go func() {
 			io.Copy(conn, client)
+			conn.Close()
 		}()
 	}
 }

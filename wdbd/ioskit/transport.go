@@ -138,40 +138,23 @@ func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 }
 
-func (t *Transport) forward(ctx context.Context, devConn io.ReadWriter) {
-	closed := false
-	ctx2, cancel := context.WithCancel(ctx)
+func (t *Transport) forward(ctx context.Context, devConn net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		io.Copy(devConn, t.clientConn)
-		if ctx2.Err() == nil {
-			cancel()
-			t.clientConn.Close()
-			closed = true
-		}
-
-		log.Errorf("transport: forward: close clientConn <-- deviceConn")
+		devConn.Close()
+		log.Errorf("forward: close clientConn <-- deviceConn")
 		wg.Done()
 	}()
 
 	wg.Add(1)
 	go func() {
 		io.Copy(t.clientConn, devConn)
-		if ctx2.Err() == nil {
-			cancel()
-			t.clientConn.Close()
-			closed = true
-		}
-
+		t.clientConn.Close()
 		log.Errorf("forward: close clientConn --> deviceConn")
 		wg.Done()
 	}()
-
-	<-ctx2.Done()
-	if !closed {
-		t.clientConn.Close()
-	}
 
 	wg.Wait()
 }
