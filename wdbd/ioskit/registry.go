@@ -3,9 +3,10 @@ package ioskit
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
-	"sync"
 )
 
 type DeviceEntry ios.DeviceEntry
@@ -138,7 +139,7 @@ func (r *Registry) AddDevice(ctx context.Context, d DeviceEntry) {
 			return // already added
 		}
 	}
-	log.Info("Adding new device", d.DeviceID, d.Properties.SerialNumber)
+	log.Infof("Adding new device, id:%v, udid:%v", d.DeviceID, d.Properties.SerialNumber)
 	r.devices = append(r.devices, d)
 
 	for l := range r.listeners {
