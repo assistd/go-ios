@@ -78,15 +78,15 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			return
 		}
 
-		t.logger.Infof("transport %v: read UsbMuxMessage:%v", t.id, decodedRequest)
+		t.logger.Infof("transport: read UsbMuxMessage header:%#v, msg:%v", request.Header, decodedRequest)
 
 		messageType := decodedRequest["MessageType"]
 		switch messageType {
 		case MuxMessageTypeListDevices:
 			// NOTE: usbmuxd允许在单个connection中多次执行ListDevices指令，待写测试代码确认，所以这里不直接返回
-			t.handleListDevices(muxOnUnixSocket)
+			t.handleListDevices(request.Header.Tag, muxOnUnixSocket)
 		case MuxMessageTypeListen:
-			t.handleListen(muxOnUnixSocket)
+			t.handleListen(request.Header.Tag, muxOnUnixSocket)
 			return
 
 		case MuxMessageTypeListListeners:
@@ -128,7 +128,16 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 }
 
-func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
+func buildMuxdMsg(tag uint32, data interface{}) ios.UsbMuxMessage {
+	payload := ios.ToPlistBytes(data)
+	header := ios.UsbMuxHeader{Length: 16 + uint32(len(payload)), Request: 8, Version: 1, Tag: tag}
+	return ios.UsbMuxMessage{
+		Header:  header,
+		Payload: payload,
+	}
+}
+
+func (t *Transport) handleListDevices(tag uint32, muxOnUnixSocket *ios.UsbMuxConnection) {
 	d, err := globalUsbmuxd.remote.ListDevices()
 	var list []ios.DeviceEntry
 	if err == nil {
@@ -139,7 +148,7 @@ func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
 	deviceList := ios.DeviceList{
 		DeviceList: list,
 	}
-	err = muxOnUnixSocket.Send(deviceList)
+	err = muxOnUnixSocket.SendMuxMessage(buildMuxdMsg(tag, deviceList))
 	if err != nil {
 		t.logger.Errorln("transport: list-device write to client failed:", err)
 	}
@@ -166,14 +175,15 @@ func (t *Transport) forward(ctx context.Context, devConn net.Conn) {
 	wg.Wait()
 }
 
-func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
+func (t *Transport) handleListen(tag uint32, muxOnUnixSocket *ios.UsbMuxConnection) {
 	cleanup := func() {
 		muxOnUnixSocket.Close()
 	}
 
 	onAdd := func(ctx context.Context, d DeviceEntry) {
 		d.MessageType = ListenMessageAttached
-		err := muxOnUnixSocket.Send(d)
+
+		err := muxOnUnixSocket.SendMuxMessage(buildMuxdMsg(tag, d))
 		if err != nil {
 			t.logger.Errorln("transport: LISTEN: write failed:", err)
 			cleanup()
@@ -182,7 +192,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 
 	onRemove := func(ctx context.Context, d DeviceEntry) {
 		d.MessageType = ListenMessageDetached
-		err := muxOnUnixSocket.Send(d)
+		err := muxOnUnixSocket.SendMuxMessage(buildMuxdMsg(tag, d))
 		if err != nil {
 			t.logger.Errorln("transport: LISTEN: write failed:", err)
 			cleanup()
@@ -195,7 +205,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		MessageType: "Result",
 		Number:      0,
 	}
-	err := muxOnUnixSocket.Send(resp)
+	err := muxOnUnixSocket.SendMuxMessage(buildMuxdMsg(tag, resp))
 	if err != nil {
 		t.logger.Errorln("transport: LISTEN: write failed:", err)
 		cleanup()
