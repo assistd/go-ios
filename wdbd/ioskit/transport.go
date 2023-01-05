@@ -4,25 +4,32 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
-	"howett.net/plist"
 	"io"
 	"net"
 	"sync"
+
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
+	"howett.net/plist"
 )
 
+var transportId int32
+
 type Transport struct {
+	id         int32
 	socket     string
 	clientConn net.Conn
-	mutex      sync.Mutex
+	logger     *log.Entry
 }
 
 // NewTransport init transport
 func NewTransport(socket string, clientConn net.Conn) *Transport {
+	transportId++
 	return &Transport{
+		id:         transportId,
 		socket:     socket,
 		clientConn: clientConn,
+		logger:     log.WithField("id", transportId),
 	}
 }
 
@@ -58,7 +65,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 		request, err := muxOnUnixSocket.ReadMessage()
 		if err != nil {
 			muxOnUnixSocket.Close()
-			log.Errorln("transport: failed reading UsbMuxMessage", err)
+			t.logger.Errorln("transport: failed reading UsbMuxMessage", err)
 			return
 		}
 
@@ -67,11 +74,11 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 		err = decoder.Decode(&decodedRequest)
 		if err != nil {
 			muxOnUnixSocket.Close()
-			log.Fatalln("transport: failed decoding MuxMessage", request, err)
+			t.logger.Fatalln("transport: failed decoding MuxMessage", request, err)
 			return
 		}
 
-		log.Infof("transport: read UsbMuxMessage:%v", decodedRequest)
+		t.logger.Infof("transport %v: read UsbMuxMessage:%v", t.id, decodedRequest)
 
 		messageType := decodedRequest["MessageType"]
 		switch messageType {
@@ -99,7 +106,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			if muxToDevice == nil {
 				devStream, err := remoteDevice.NewConn(nil)
 				if err != nil {
-					log.Errorf("transport: connect to %v failed: %v", t.socket, err)
+					t.logger.Errorf("transport: connect to %v failed: %v", t.socket, err)
 					muxOnUnixSocket.Close()
 					return
 				}
@@ -108,7 +115,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 
 			err = sendRequest(muxToDevice, request)
 			if err != nil {
-				log.Errorf("transport: failed write to device: %v", err)
+				t.logger.Errorf("transport: failed write to device: %v", err)
 				muxOnUnixSocket.Close()
 				muxToDevice.Close()
 				return
@@ -116,7 +123,7 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			t.forward(context.Background(), muxToDevice)
 			return
 		default:
-			log.Fatalf("Unexpected command %s received!", messageType)
+			t.logger.Fatalf("Unexpected command %s received!", messageType)
 		}
 	}
 }
@@ -134,7 +141,7 @@ func (t *Transport) handleListDevices(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 	err = muxOnUnixSocket.Send(deviceList)
 	if err != nil {
-		log.Errorln("transport: list-device write to client failed:", err)
+		t.logger.Errorln("transport: list-device write to client failed:", err)
 	}
 }
 
@@ -144,7 +151,7 @@ func (t *Transport) forward(ctx context.Context, devConn net.Conn) {
 	go func() {
 		io.Copy(devConn, t.clientConn)
 		devConn.Close()
-		log.Errorf("forward: close clientConn <-- deviceConn")
+		t.logger.Errorf("forward: close clientConn <-- deviceConn")
 		wg.Done()
 	}()
 
@@ -152,7 +159,7 @@ func (t *Transport) forward(ctx context.Context, devConn net.Conn) {
 	go func() {
 		io.Copy(t.clientConn, devConn)
 		t.clientConn.Close()
-		log.Errorf("forward: close clientConn --> deviceConn")
+		t.logger.Errorf("forward: close clientConn --> deviceConn")
 		wg.Done()
 	}()
 
@@ -168,7 +175,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		d.MessageType = ListenMessageAttached
 		err := muxOnUnixSocket.Send(d)
 		if err != nil {
-			log.Errorln("transport: LISTEN: write failed:", err)
+			t.logger.Errorln("transport: LISTEN: write failed:", err)
 			cleanup()
 		}
 	}
@@ -177,7 +184,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 		d.MessageType = ListenMessageDetached
 		err := muxOnUnixSocket.Send(d)
 		if err != nil {
-			log.Errorln("transport: LISTEN: write failed:", err)
+			t.logger.Errorln("transport: LISTEN: write failed:", err)
 			cleanup()
 		}
 	}
@@ -190,7 +197,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 	}
 	err := muxOnUnixSocket.Send(resp)
 	if err != nil {
-		log.Errorln("transport: LISTEN: write failed:", err)
+		t.logger.Errorln("transport: LISTEN: write failed:", err)
 		cleanup()
 		return
 	}
@@ -198,7 +205,7 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 	// trigger onAdd/onRemove
 	d, err := globalUsbmuxd.remote.ListDevices()
 	if err == nil {
-		log.Infof("--> %+v", d)
+		t.logger.Infof("--> %+v", d)
 		onAdd(nil, d)
 	}
 
@@ -208,5 +215,5 @@ func (t *Transport) handleListen(muxOnUnixSocket *ios.UsbMuxConnection) {
 
 	//use this to detect when the conn is closed. There shouldn't be any messages received ever.
 	_, err = muxOnUnixSocket.ReadMessage()
-	log.Error("transport: LISTEN: error on read", err)
+	t.logger.Error("transport: LISTEN: error on read", err)
 }
