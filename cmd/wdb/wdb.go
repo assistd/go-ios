@@ -7,26 +7,51 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
 )
 
 var usbmuxdPath = flag.String("usbmuxd-path", "unix:/var/run/usbmuxd", "usbmuxd path")
 var addr = flag.String("addr", "", "remote usbmuxd addr")
 var udid = flag.String("udid", "", "remote device udid")
+var logPath = flag.String("log_path", "/var/log/", "log directory")
 
 func initLog() {
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetReportCaller(true)
-	log.SetFormatter(&log.TextFormatter{
+	/*
+		if _, err := os.Stat(*logPath); os.IsNotExist(err) {
+			err := os.MkdirAll(filepath.Dir(*logPath), 0755)
+			if err != nil {
+				panic(fmt.Sprintf("mkdir %v error %v", *logPath, err))
+			}
+		}
+	*/
+	savePath := fmt.Sprintf("%v/wdb", *logPath)
+	p := savePath + ".%Y%m%d.log"
+	writer, _ := rotatelogs.New(p,
+		rotatelogs.WithLinkName(savePath),
+		rotatelogs.WithMaxAge(time.Duration(7)*time.Hour*24),
+		rotatelogs.WithRotationTime(time.Hour*24),
+		rotatelogs.WithLinkName(""),
+	)
+	formatter := &log.TextFormatter{
+		DisableColors:   false,
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC3339Nano,
 		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
 			filename := path.Base(f.File)
 			return "", fmt.Sprintf("%s:%d", filename, f.Line)
 		},
-	})
+	}
+
+	log.SetReportCaller(true)
+	log.SetFormatter(formatter)
 	log.SetLevel(log.InfoLevel)
+	log.AddHook(lfshook.NewHook(writer, formatter))
 }
 
 func initUsbmuxd() {
