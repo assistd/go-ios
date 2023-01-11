@@ -115,7 +115,7 @@ Usage:
   ios runwda [--bundleid=<bundleid>] [--testrunnerbundleid=<testbundleid>] [--xctestconfig=<xctestconfig>] [--arg=<a>]... [--env=<e>]... [options]
   ios ax [options]
   ios debug [options] [--stop-at-entry] <app_path>
-  ios fsync [--bundleID=<bundleid>] (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
+  ios fsync [options] [--bundleID=<bundleid>] (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
   ios reboot [options]
   ios -h | --help
   ios --version | version [options]
@@ -201,7 +201,7 @@ The commands work as following:
    >                                                                  specify runtime args and env vars like --env ENV_1=something --env ENV_2=else  and --arg ARG1 --arg ARG2
    ios ax [options]                                                   Access accessibility inspector features. 
    ios debug [--stop-at-entry] <app_path>                             Start debug with lldb
-   ios fsync [--bundleID=<bundleid>] (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
+   ios fsync [options] [--bundleID=<bundleid>] (ls | rm | cat | stat | tree | rmtree | mkdir | pull | push) [--path=<targetPath>] [--src=<srcPath>] [--dst=<dstPath>]
    > app file management
    ios reboot [options]                                               Reboot the given device
    ios -h | --help                                                    Prints this screen.
