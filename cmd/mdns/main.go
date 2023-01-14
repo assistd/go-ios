@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/danielpaulus/go-ios/ios/debugproxy"
+	"github.com/danielpaulus/go-ios/wdbd/ioskit"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,6 +22,7 @@ func initLog() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetReportCaller(true)
 	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
 		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
 			filename := path.Base(f.File)
 			return "", fmt.Sprintf("%s:%d", filename, f.Line)
@@ -68,19 +71,39 @@ func proxy() error {
 	}
 }
 
+func proxyBinary(device *ioskit.RemoteDevice) error {
+	listener, err := net.Listen("tcp", "127.0.39.237:62078")
+	if err != nil {
+		return err
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Errorf("error with connection: %e", err)
+			break
+		}
+
+		log.Infoln("new connection: %v", conn)
+		t := NewLockDownTransport(conn, device)
+		t.proxyMuxConnection()
+	}
+
+	return nil
+}
+
 func main() {
 	flag.Parse()
 	initLog()
 
-	/*
-		remoteDevice := ioskit.NewRemoteDevice(
-			"192.168.0.192:27016",
-			"8a8358e12e0306cc804f4367d9152fb795e3b561")
-		log.Infof("connected to remote device: %+v", remoteDevice)
-		go func() {
-			log.Panicln(remoteDevice.Monitor(context.Background()))
-		}()
-	*/
+	remoteDevice := ioskit.NewRemoteDevice(
+		"192.168.0.192:27016",
+		"8a8358e12e0306cc804f4367d9152fb795e3b561")
+	log.Infof("connected to remote device: %+v", remoteDevice)
+	go func() {
+		log.Panicln(remoteDevice.Monitor(context.Background()))
+	}()
 
-	panic(proxy())
+	panic(proxyBinary(remoteDevice))
+	// panic(proxy())
 }
