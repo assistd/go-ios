@@ -61,6 +61,11 @@ func (p *Provider) Run() error {
 		return err
 	}
 
+	pair, err := p.device.ReadPairRecord()
+	if err != nil {
+		return err
+	}
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -68,7 +73,7 @@ func (p *Provider) Run() error {
 		}
 
 		lockdownFromClient := ios.NewLockDownConnection(ios.NewDeviceConnectionWithConn(conn))
-		t := NewLockDownTransport(lockdownFromClient, p.device)
+		t := NewLockDownTransport(lockdownFromClient, pair, p.device)
 
 		go func() {
 			t.Proxy()

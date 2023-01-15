@@ -2,6 +2,7 @@ package ioskit
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"net"
 
@@ -15,18 +16,20 @@ var lockdownId int32
 
 type LockDownTransport struct {
 	*ios.LockDownConnection
-	id     int32
-	device *RemoteDevice
-	logger *log.Entry
+	pairRecord ios.PairRecord
+	id         int32
+	device     *RemoteDevice
+	logger     *log.Entry
 }
 
-func NewLockDownTransport(conn *ios.LockDownConnection, device *RemoteDevice) *LockDownTransport {
+func NewLockDownTransport(conn *ios.LockDownConnection, pairRecord ios.PairRecord, device *RemoteDevice) *LockDownTransport {
 	lockdownId++
 	return &LockDownTransport{
-		conn,
-		lockdownId,
-		device,
-		log.WithField("id", lockdownId),
+		LockDownConnection: conn,
+		pairRecord:         pairRecord,
+		id:                 lockdownId,
+		device:             device,
+		logger:             log.WithField("id", lockdownId),
 	}
 }
 
@@ -58,9 +61,12 @@ func (t *LockDownTransport) Proxy() error {
 	}
 	defer lockdownToDevice.Close()
 
+	// useSessionSSL := false
+
 	for {
 		request, err := t.ReadMessage()
 		if err != nil {
+			t.logger.Errorln(hex.Dump(request))
 			t.Close()
 			t.logger.Errorln("client read failed", err)
 			return fmt.Errorf("client read failed: %v", err)
@@ -74,7 +80,11 @@ func (t *LockDownTransport) Proxy() error {
 			t.logger.Errorln("failed decoding", request, err)
 		}
 
-		t.logger.Infof("read UsbMuxMessage:%v", decodedRequest)
+		t.logger.Infof("--> UsbMuxMessage:%v", decodedRequest)
+		if decodedRequest["Request"] == "StartSession" {
+			decodedRequest["HostID"] = t.pairRecord.HostID
+			decodedRequest["SystemBUID"] = t.pairRecord.SystemBUID
+		}
 
 		err = lockdownToDevice.Send(decodedRequest)
 		if err != nil {
@@ -100,11 +110,14 @@ func (t *LockDownTransport) Proxy() error {
 
 		err = t.Send(decodedResponse)
 		if err != nil {
-			t.logger.Warningln("--> Failed sending LockdownMessage from device to host service", decodedResponse, err)
+			t.logger.Warningln("Failed sending LockdownMessage from device to host service", decodedResponse, err)
 		}
 
 		if decodedResponse["EnableSessionSSL"] == true {
-			panic("EnableSessionSSL==true")
+			// useSessionSSL = true
+			lockdownToDevice.EnableSessionSsl(t.pairRecord)
+			t.EnableSessionSslServerMode(t.pairRecord)
+			// decodedResponse["EnableSessionSSL"] = false
 		}
 
 		if decodedResponse["Request"] == "StartService" && decodedResponse["Error"] == nil {
@@ -117,7 +130,7 @@ func (t *LockDownTransport) Proxy() error {
 				ServiceName: decodedResponse["Service"].(string),
 				UseSSL:      useSSL}
 
-			t.logger.Debugf("Detected Service Start:%+v", info)
+			t.logger.Infoln("Detected Service Start:%+v", info)
 		}
 
 		if decodedResponse["Request"] == "StopSession" {
