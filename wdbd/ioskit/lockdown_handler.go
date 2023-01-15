@@ -1,58 +1,33 @@
-package main
+package ioskit
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/debugproxy"
-	"github.com/danielpaulus/go-ios/wdbd/ioskit"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 )
 
-var transportId int32
+var lockdownId int32
 
 type LockDownTransport struct {
+	*ios.LockDownConnection
 	id     int32
-	conn   net.Conn
-	device *ioskit.RemoteDevice
+	device *RemoteDevice
 	logger *log.Entry
-	// sessionID string
-	// mutex  sync.Mutex
 }
 
-func NewLockDownTransport(conn net.Conn, device *ioskit.RemoteDevice) *LockDownTransport {
-	transportId++
+func NewLockDownTransport(conn *ios.LockDownConnection, device *RemoteDevice) *LockDownTransport {
+	lockdownId++
 	return &LockDownTransport{
-		id:     transportId,
-		conn:   conn,
-		device: device,
-		logger: log.WithField("id", transportId),
+		conn,
+		lockdownId,
+		device,
+		log.WithField("id", lockdownId),
 	}
-}
-
-func (t *LockDownTransport) ReadMessage() ([]byte, error) {
-	lenbuf := make([]byte, 4)
-	_, err := io.ReadFull(t.conn, lenbuf)
-	if err != nil {
-		return nil, err
-	}
-	len := binary.BigEndian.Uint32(lenbuf)
-
-	buf := make([]byte, len)
-	n, err := io.ReadFull(t.conn, buf)
-	if err != nil {
-		return nil, fmt.Errorf("lockdown Payload had incorrect size: %d original error: %s", n, err)
-	}
-	return buf, nil
-}
-
-func (t *LockDownTransport) Close() {
-	t.conn.Close()
 }
 
 func (t *LockDownTransport) connectToDevice() (net.Conn, *ios.LockDownConnection, error) {
@@ -76,27 +51,7 @@ func (t *LockDownTransport) connectToDevice() (net.Conn, *ios.LockDownConnection
 	return netConn, lockdownToDevice, nil
 }
 
-func (t *LockDownTransport) proxyBinaryMode() error {
-	conn, lockdownToDevice, err := t.connectToDevice()
-	if err != nil {
-		return nil
-	}
-	defer lockdownToDevice.Close()
-
-	go func() {
-		io.Copy(t.conn, conn)
-		t.conn.Close()
-	}()
-
-	go func() {
-		io.Copy(conn, t.conn)
-		conn.Close()
-	}()
-
-	return nil
-}
-
-func (t *LockDownTransport) proxyMuxConnection() error {
+func (t *LockDownTransport) Proxy() error {
 	_, lockdownToDevice, err := t.connectToDevice()
 	if err != nil {
 		return nil
@@ -139,6 +94,13 @@ func (t *LockDownTransport) proxyMuxConnection() error {
 		err = decoder.Decode(&decodedResponse)
 		if err != nil {
 			t.logger.Errorln("Failed decoding LockdownMessage", decodedResponse, err)
+		} else {
+			t.logger.Infoln("<-- response", decodedResponse)
+		}
+
+		err = t.Send(decodedResponse)
+		if err != nil {
+			t.logger.Warningln("--> Failed sending LockdownMessage from device to host service", decodedResponse, err)
 		}
 
 		if decodedResponse["EnableSessionSSL"] == true {

@@ -71,27 +71,6 @@ func proxy() error {
 	}
 }
 
-func proxyBinary(device *ioskit.RemoteDevice) error {
-	listener, err := net.Listen("tcp", "127.0.39.237:62078")
-	if err != nil {
-		return err
-	}
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Errorf("error with connection: %e", err)
-			break
-		}
-
-		log.Infoln("new connection: %v", conn)
-		t := NewLockDownTransport(conn, device)
-		t.proxyMuxConnection()
-	}
-
-	return nil
-}
-
 func main() {
 	flag.Parse()
 	initLog()
@@ -104,6 +83,10 @@ func main() {
 		log.Panicln(remoteDevice.Monitor(context.Background()))
 	}()
 
-	panic(proxyBinary(remoteDevice))
+	provider, err := ioskit.NewProvider("127.0.39.237:62078", remoteDevice)
+	if err != nil {
+		panic(err)
+	}
+	panic(provider.Run())
 	// panic(proxy())
 }
