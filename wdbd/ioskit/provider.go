@@ -6,14 +6,14 @@ import (
 	"sync"
 
 	"github.com/danielpaulus/go-ios/ios"
-	"github.com/danielpaulus/go-ios/ios/debugproxy"
 	log "github.com/sirupsen/logrus"
 )
 
 type Provider struct {
 	socket     string
 	device     *RemoteDevice // serial -> RemoteDevice
-	services   []debugproxy.PhoneServiceInformation
+	deviceID   int
+	services   []*PhoneService
 	counter    int
 	pairRecord ios.PairRecord
 	mutex      sync.Mutex
@@ -26,9 +26,15 @@ func NewProvider(socket string, device *RemoteDevice) (*Provider, error) {
 		return nil, fmt.Errorf("read pair record failed:%v", err)
 	}
 
+	entry, err := device.ListDevices()
+	if err != nil {
+		return nil, fmt.Errorf("read device:%v", err)
+	}
+
 	return &Provider{
 		socket:     socket,
 		device:     device,
+		deviceID:   entry.DeviceID,
 		pairRecord: pair,
 	}, nil
 }
@@ -36,6 +42,13 @@ func NewProvider(socket string, device *RemoteDevice) (*Provider, error) {
 func makeMuxConn(conn net.Conn) *ios.UsbMuxConnection {
 	deviceConn := ios.NewDeviceConnectionWithConn(conn)
 	return ios.NewUsbMuxConnection(deviceConn)
+}
+
+func (p *Provider) spawnService(serviceInfo *PhoneService) {
+	p.mutex.Lock()
+	p.services = append(p.services, serviceInfo)
+	p.mutex.Unlock()
+	go serviceInfo.Proxy(p)
 }
 
 func (p *Provider) connectToDevice(deviceID int) (net.Conn, *ios.LockDownConnection, error) {
@@ -98,10 +111,12 @@ func (p *Provider) Run() error {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Errorf("error with connection: %e", err)
+			// FIXME: close all clients
+			return err
 		}
 
 		lockdownFromClient := ios.NewLockDownConnection(ios.NewDeviceConnectionWithConn(conn))
-		t := NewLockDownTransport(lockdownFromClient, p.pairRecord, p.device)
+		t := NewLockDownTransport(p, lockdownFromClient, p.pairRecord, p.device)
 
 		go func() {
 			t.Proxy()

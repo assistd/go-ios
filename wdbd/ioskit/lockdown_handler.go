@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/danielpaulus/go-ios/ios"
-	"github.com/danielpaulus/go-ios/ios/debugproxy"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 )
@@ -16,16 +15,18 @@ var lockdownId int32
 
 type LockDownTransport struct {
 	*ios.LockDownConnection
+	provider   *Provider
 	pairRecord ios.PairRecord
 	id         int32
 	device     *RemoteDevice
 	logger     *log.Entry
 }
 
-func NewLockDownTransport(conn *ios.LockDownConnection, pairRecord ios.PairRecord, device *RemoteDevice) *LockDownTransport {
+func NewLockDownTransport(provider *Provider, conn *ios.LockDownConnection, pairRecord ios.PairRecord, device *RemoteDevice) *LockDownTransport {
 	lockdownId++
 	return &LockDownTransport{
 		LockDownConnection: conn,
+		provider:           provider,
 		pairRecord:         pairRecord,
 		id:                 lockdownId,
 		device:             device,
@@ -95,8 +96,6 @@ func (t *LockDownTransport) Proxy() error {
 		if err != nil {
 			t.logger.Errorf("error reading from device: %+v", err)
 			panic(err)
-			response, err = lockdownToDevice.ReadMessage() // FIXME
-			t.logger.Infof("second read: %+v %+v", response, err)
 		}
 
 		var decodedResponse map[string]interface{}
@@ -125,11 +124,11 @@ func (t *LockDownTransport) Proxy() error {
 			if decodedResponse["EnableServiceSSL"] != nil {
 				useSSL = decodedResponse["EnableServiceSSL"].(bool)
 			}
-			info := debugproxy.PhoneServiceInformation{
+			info := &PhoneService{
 				ServicePort: uint16(decodedResponse["Port"].(uint64)),
 				ServiceName: decodedResponse["Service"].(string),
 				UseSSL:      useSSL}
-
+			t.provider.spawnService(info)
 			t.logger.Infof("Detected Service Start:%+v", info)
 		}
 

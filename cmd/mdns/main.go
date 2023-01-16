@@ -83,6 +83,9 @@ func main() {
 		log.Panicln(remoteDevice.Monitor(context.Background()))
 	}()
 
+	// FIXME: make Monitor to get a device, or it will crash on the following panic(err)
+	time.Sleep(time.Second)
+
 	provider, err := ioskit.NewProvider("127.0.39.237:62078", remoteDevice)
 	if err != nil {
 		panic(err)
