@@ -130,7 +130,7 @@ func (t *LockDownTransport) Proxy() error {
 				ServiceName: decodedResponse["Service"].(string),
 				UseSSL:      useSSL}
 
-			t.logger.Infoln("Detected Service Start:%+v", info)
+			t.logger.Infof("Detected Service Start:%+v", info)
 		}
 
 		if decodedResponse["Request"] == "StopSession" {

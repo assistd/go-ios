@@ -61,13 +61,11 @@ func (p *Provider) savePairFromRemote() error {
 	}
 	defer muxConn.Close()
 
-	buid, err := muxConn.ReadBuid()
-	if err != nil {
-		return err
-	}
-
 	pair := p.pairRecord
-	pair.SystemBUID = buid
+	// 两个要点
+	// 1. Usbmuxd会使用DeviceCertificate与真正的设备使用ssl握手，由于我们没有设备的私钥，只有证书（证书中含有公钥），
+	//    这里直接把设备的私钥替换为设备所连PC的证书（内含公钥），我们的程序使用PC的私钥即可与usbmuxd ssl握手成功。
+	// 2. 注册用的wifi地址必须与pairRecord的WiFiMACAddress一致
 	pair.DeviceCertificate = pair.HostCertificate
 
 	udid := p.device.Serial
