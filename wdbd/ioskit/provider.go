@@ -48,7 +48,10 @@ func (p *Provider) spawnService(serviceInfo *PhoneService) {
 	p.mutex.Lock()
 	p.services = append(p.services, serviceInfo)
 	p.mutex.Unlock()
-	go serviceInfo.Proxy(p)
+	go func() {
+		err := serviceInfo.Proxy(p)
+		log.Errorf("service proxy: %v end: %v", serviceInfo, err)
+	}()
 }
 
 func (p *Provider) connectToDevice(deviceID int) (net.Conn, *ios.LockDownConnection, error) {

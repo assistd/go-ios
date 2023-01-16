@@ -47,7 +47,7 @@ func (s *PhoneService) Proxy(p *Provider) error {
 	pos := strings.Index(socket, ":")
 	portToListen := swapUint16(s.ServicePort)
 	logger.Infof("service:%v, port %v -> %v", s.ServiceName, s.ServicePort, portToListen)
-	addr := socket[0:pos] + strconv.Itoa(int(portToListen))
+	addr := socket[0:pos] + ":" + strconv.Itoa(int(s.ServicePort))
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -81,10 +81,10 @@ func (s *PhoneService) Proxy(p *Provider) error {
 
 		if s.UseSSL {
 			if shakeOnly {
-				deviceConn.EnableSessionSslHandshakeOnly(p.pairRecord)
+				deviceConn.EnableSessionSslServerModeHandshakeOnly(p.pairRecord)
 				deviceConn2.EnableSessionSslHandshakeOnly(p.pairRecord)
 			} else {
-				deviceConn.EnableSessionSsl(p.pairRecord)
+				deviceConn.EnableSessionSslServerMode(p.pairRecord)
 				deviceConn2.EnableSessionSsl(p.pairRecord)
 			}
 		}
