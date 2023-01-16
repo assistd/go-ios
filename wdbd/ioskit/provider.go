@@ -54,6 +54,36 @@ func (p *Provider) connectToDevice(deviceID int) (net.Conn, *ios.LockDownConnect
 	return netConn, lockdownToDevice, nil
 }
 
+func (p *Provider) savePairFromRemote() error {
+	muxConn, err := ios.NewUsbMuxConnectionSimple()
+	if err != nil {
+		return err
+	}
+	defer muxConn.Close()
+
+	buid, err := muxConn.ReadBuid()
+	if err != nil {
+		return err
+	}
+
+	pair := p.pairRecord
+	pair.SystemBUID = buid
+	pair.DeviceCertificate = pair.HostCertificate
+
+	udid := p.device.Serial
+	pairRecordData := ios.SavePair{
+		BundleID:            "go.ios.control",
+		ClientVersionString: "go-ios-1.0.0",
+		MessageType:         "SavePairRecord",
+		ProgName:            "go-ios",
+		LibUSBMuxVersion:    3,
+		PairRecordID:        udid,
+		PairRecordData:      ios.ToPlistBytes(pair),
+	}
+	err = muxConn.Send(pairRecordData)
+	return err
+}
+
 // Run serve a tcp server, and do the message switching between remote usbmuxd with local one
 func (p *Provider) Run() error {
 	listener, err := net.Listen("tcp", p.socket)
@@ -61,9 +91,9 @@ func (p *Provider) Run() error {
 		return err
 	}
 
-	pair, err := p.device.ReadPairRecord()
+	err = p.savePairFromRemote()
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	for {
@@ -73,7 +103,7 @@ func (p *Provider) Run() error {
 		}
 
 		lockdownFromClient := ios.NewLockDownConnection(ios.NewDeviceConnectionWithConn(conn))
-		t := NewLockDownTransport(lockdownFromClient, pair, p.device)
+		t := NewLockDownTransport(lockdownFromClient, p.pairRecord, p.device)
 
 		go func() {
 			t.Proxy()
