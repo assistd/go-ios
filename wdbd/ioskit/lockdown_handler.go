@@ -67,7 +67,9 @@ func (t *LockDownTransport) Proxy() error {
 	for {
 		request, err := t.ReadMessage()
 		if err != nil {
-			t.logger.Errorln(hex.Dump(request))
+			if len(request) > 0 {
+				t.logger.Errorln(hex.Dump(request))
+			}
 			t.Close()
 			t.logger.Errorln("client read failed", err)
 			return fmt.Errorf("client read failed: %v", err)

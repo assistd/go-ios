@@ -90,12 +90,12 @@ func (s *PhoneService) Proxy(p *Provider) error {
 		}
 
 		go func() {
-			io.Copy(conn, netConn)
-			conn.Close()
+			io.Copy(deviceConn.Writer(), deviceConn2.Reader())
+			deviceConn.Close()
 		}()
 		go func() {
-			io.Copy(netConn, conn)
-			netConn.Close()
+			io.Copy(deviceConn2.Writer(), deviceConn.Reader())
+			deviceConn2.Close()
 		}()
 	}
 }
