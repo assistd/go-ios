@@ -127,9 +127,9 @@ func (t *LockDownTransport) Proxy() error {
 				useSSL = decodedResponse["EnableServiceSSL"].(bool)
 			}
 			info := &PhoneService{
-				ServicePort: uint16(decodedResponse["Port"].(uint64)),
-				ServiceName: decodedResponse["Service"].(string),
-				UseSSL:      useSSL}
+				Port:   uint16(decodedResponse["Port"].(uint64)),
+				Name:   decodedResponse["Service"].(string),
+				UseSSL: useSSL}
 			t.provider.spawnService(info)
 			t.logger.Infof("Detected Service Start:%+v", info)
 		}
