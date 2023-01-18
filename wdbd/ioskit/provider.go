@@ -49,7 +49,14 @@ func (p *Provider) spawnService(serviceInfo *PhoneService) {
 	p.services = append(p.services, serviceInfo)
 	p.mutex.Unlock()
 	go func() {
-		err := serviceInfo.Proxy(p)
+		var err error
+		switch serviceInfo.Name {
+		case "com.apple.mobile.assertion_agent":
+			s := PowerAssertionService(*serviceInfo)
+			err = s.Proxy(p)
+		default:
+			err = serviceInfo.Proxy(p)
+		}
 		log.Errorf("service proxy: %v end: %v", serviceInfo, err)
 	}()
 }
@@ -77,12 +84,18 @@ func (p *Provider) savePairFromRemote() error {
 	}
 	defer muxConn.Close()
 
+	buid, err := muxConn.ReadBuid()
+	if err != nil {
+		return err
+	}
+
 	pair := p.pairRecord
 	// 两个要点
 	// 1. Usbmuxd会使用DeviceCertificate与真正的设备使用ssl握手，由于我们没有设备的私钥，只有证书（证书中含有公钥），
 	//    这里直接把设备的私钥替换为设备所连PC的证书（内含公钥），我们的程序使用PC的私钥即可与usbmuxd ssl握手成功。
 	// 2. 注册用的wifi地址必须与pairRecord的WiFiMACAddress一致
 	pair.DeviceCertificate = pair.HostCertificate
+	pair.SystemBUID = buid
 
 	udid := p.device.Serial
 	pairRecordData := ios.SavePair{

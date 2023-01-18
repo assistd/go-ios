@@ -55,6 +55,9 @@ func (t *LockDownTransport) connectToDevice() (net.Conn, *ios.LockDownConnection
 	return netConn, lockdownToDevice, nil
 }
 
+const wirelessLockdown = "com.apple.mobile.wireless_lockdown"
+const developerdomain = "com.apple.xcode.developerdomain"
+
 func (t *LockDownTransport) Proxy() error {
 	_, lockdownToDevice, err := t.connectToDevice()
 	if err != nil {
@@ -107,6 +110,23 @@ func (t *LockDownTransport) Proxy() error {
 			t.logger.Errorln("Failed decoding LockdownMessage", decodedResponse, err)
 		} else {
 			t.logger.Infoln("<-- response", decodedResponse)
+		}
+
+		// 使得xcode中可以看到设备，这里的两个Value是从某台iPhoneX中抓取协议获取的，也许随便什么数值都行。
+		// 讨论细节：https://github.com/assistd/go-ios/issues/44#issuecomment-1387269808
+		if decodedRequest["Domain"] == wirelessLockdown && decodedRequest["Request"] == "GetValue" {
+			if decodedRequest["Key"] == "EnableWifiDebugging" {
+				decodedResponse = map[string]interface{}{"Domain": "com.apple.mobile.wireless_lockdown", "Key": "EnableWifiDebugging", "Request": "GetValue", "Value": true}
+				t.logger.Infoln("replace response to ", decodedResponse)
+			} else if decodedRequest["Key"] == "WirelessBuddyID" {
+				decodedResponse = map[string]interface{}{"Domain": "com.apple.mobile.wireless_lockdown", "Key": "WirelessBuddyID", "Request": "GetValue", "Value": "812D42E1-D7D1-433E-9710-8016589E265D"}
+				t.logger.Infoln("replace response to ", decodedResponse)
+			}
+		} else if decodedRequest["Domain"] == developerdomain && decodedRequest["Request"] == "GetValue" {
+			if decodedRequest["Key"] == "WirelessHosts" {
+				decodedResponse = map[string]interface{}{"Domain": "com.apple.xcode.developerdomain", "Key": "WirelessHosts", "Request": "GetValue", "Value": []string{"EEAF6835-18E1-554B-B1F9-9629BF2E84B4"}}
+				t.logger.Infoln("replace response to ", decodedResponse)
+			}
 		}
 
 		err = t.Send(decodedResponse)
