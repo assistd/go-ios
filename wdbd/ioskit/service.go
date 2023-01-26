@@ -63,13 +63,33 @@ func (s *PhoneService) Proxy(p *Provider) error {
 		return err
 	}
 
+	cleanup := func() {
+		deviceConn.Close()
+		deviceConn2.Close()
+	}
 	if s.UseSSL {
 		if _, ok := serviceConfigurations[s.Name]; ok {
-			deviceConn.EnableSessionSslServerModeHandshakeOnly(p.pairRecord)
-			deviceConn2.EnableSessionSslHandshakeOnly(p.pairRecord)
+			if err := deviceConn.EnableSessionSslServerModeHandshakeOnly(p.pairRecord); err != nil {
+				logger.Errorln("ssl fail:", err)
+				cleanup()
+				return err
+			}
+			if err := deviceConn2.EnableSessionSslHandshakeOnly(p.pairRecord); err != nil {
+				logger.Errorln("ssl fail:", err)
+				cleanup()
+				return err
+			}
 		} else {
-			deviceConn.EnableSessionSslServerMode(p.pairRecord)
-			deviceConn2.EnableSessionSsl(p.pairRecord)
+			if err := deviceConn.EnableSessionSslServerMode(p.pairRecord); err != nil {
+				logger.Errorln("ssl fail:", err)
+				cleanup()
+				return err
+			}
+			if err := deviceConn2.EnableSessionSsl(p.pairRecord); err != nil {
+				logger.Errorln("ssl fail:", err)
+				cleanup()
+				return err
+			}
 		}
 	}
 
