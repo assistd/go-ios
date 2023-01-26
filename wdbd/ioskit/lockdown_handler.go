@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/danielpaulus/go-ios/ios"
+	"github.com/danielpaulus/go-ios/wdbd/mackit"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 )
@@ -67,6 +68,8 @@ func (t *LockDownTransport) Proxy() error {
 	defer t.Close()
 
 	// useSessionSSL := false
+
+	wirelessHosts, _ := mackit.GetUdid()
 
 	for {
 		request, err := t.ReadMessage()
@@ -130,7 +133,7 @@ func (t *LockDownTransport) Proxy() error {
 			}
 		} else if decodedRequest["Domain"] == developerdomain && decodedRequest["Request"] == "GetValue" {
 			if decodedRequest["Key"] == "WirelessHosts" {
-				decodedResponse = map[string]interface{}{"Domain": "com.apple.xcode.developerdomain", "Key": "WirelessHosts", "Request": "GetValue", "Value": []string{"EEAF6835-18E1-554B-B1F9-9629BF2E84B4"}}
+				decodedResponse = map[string]interface{}{"Domain": "com.apple.xcode.developerdomain", "Key": "WirelessHosts", "Request": "GetValue", "Value": []string{wirelessHosts}}
 				t.logger.Infoln("replace response to ", decodedResponse)
 			}
 		}
