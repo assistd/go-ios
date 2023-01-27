@@ -75,21 +75,31 @@ func main() {
 	flag.Parse()
 	initLog()
 
+	// fe32ecec58d608c8735f7f8ca67ca99bdea10ee3
+	// 8a8358e12e0306cc804f4367d9152fb795e3b561
+	// 00008110-00142C9A3642801E
+	// iPhone13pro 00008110-000515511491801E
 	remoteDevice := ioskit.NewRemoteDevice(
 		"192.168.0.192:27016",
-		"8a8358e12e0306cc804f4367d9152fb795e3b561")
+		"00008110-00142C9A3642801E")
 	log.Infof("connected to remote device: %+v", remoteDevice)
-	go func() {
-		log.Panicln(remoteDevice.Monitor(context.Background()))
-	}()
 
-	// FIXME: make Monitor to get a device, or it will crash on the following panic(err)
-	time.Sleep(time.Second)
+	remoteDevice.Listen(ioskit.NewDeviceListener(
+		func(ctx context.Context, d ioskit.DeviceEntry) {
+			go func() {
+				provider, err := ioskit.NewProvider("127.0.39.237:62078", remoteDevice)
+				if err != nil {
+					panic(err)
+				}
+				panic(provider.Run())
+			}()
+		},
 
-	provider, err := ioskit.NewProvider("127.0.39.237:62078", remoteDevice)
-	if err != nil {
-		panic(err)
-	}
-	panic(provider.Run())
-	// panic(proxy())
+		func(ctx context.Context, d ioskit.DeviceEntry) {
+			// TODO: should cancal all goroutines and close all resources
+			panic("device is removed")
+		},
+	))
+
+	log.Panicln(remoteDevice.Monitor(context.Background()))
 }

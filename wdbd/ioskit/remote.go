@@ -26,6 +26,10 @@ func NewRemoteDevice(addr, serial string) *RemoteDevice {
 	}
 }
 
+func (r *RemoteDevice) Listen(l DeviceListener) func() {
+	return r.registry.Listen(l)
+}
+
 func (r *RemoteDevice) Monitor(ctx context.Context) error {
 	kit, _ := NewDeviceMonitor("tcp", r.Addr)
 	err := kit.Monitor(ctx, r.registry, -1)
