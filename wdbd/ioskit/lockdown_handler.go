@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"runtime"
 
 	"github.com/danielpaulus/go-ios/ios"
-	"github.com/danielpaulus/go-ios/wdbd/mackit"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
 )
@@ -59,6 +59,33 @@ func (t *LockDownTransport) connectToDevice() (net.Conn, *ios.LockDownConnection
 const wirelessLockdown = "com.apple.mobile.wireless_lockdown"
 const developerdomain = "com.apple.xcode.developerdomain"
 
+func (t *LockDownTransport) filter(decodedRequest map[string]interface{}) (map[string]interface{}, bool) {
+	if runtime.GOOS != "darwin" {
+		return nil, false
+	}
+
+	// defaults delete com.apple.dt.Xcode DVTDeviceTokens
+	// defaults delete com.apple.dt.xcodebuild DVTDeviceTokens
+	// defaults delete com.apple.iTunes WirelessBuddyID
+	// 使得xcode中可以看到设备，这里的两个Value是从某台iPhoneX中抓取协议获取的，也许随便什么数值都行。
+	// 讨论细节：https://github.com/assistd/go-ios/issues/44#issuecomment-1387269808
+	if decodedRequest["Domain"] == wirelessLockdown && decodedRequest["Request"] == "GetValue" {
+		if decodedRequest["Key"] == "EnableWifiDebugging" {
+			return map[string]interface{}{"Domain": wirelessLockdown, "Key": "EnableWifiDebugging", "Request": "GetValue", "Value": true}, true
+		} else if decodedRequest["Key"] == "WirelessBuddyID" {
+			return map[string]interface{}{"Domain": wirelessLockdown, "Key": "WirelessBuddyID", "Request": "GetValue", "Value": t.provider.xcode.wirelessBuddyID}, true
+		} else if decodedRequest["Key"] == "EnableWifiConnections" {
+			return map[string]interface{}{"Domain": wirelessLockdown, "Key": "EnableWifiConnections", "Request": "GetValue", "Value": true}, true
+		}
+	} else if decodedRequest["Domain"] == developerdomain && decodedRequest["Request"] == "GetValue" {
+		if decodedRequest["Key"] == "WirelessHosts" {
+			return map[string]interface{}{"Domain": developerdomain, "Key": "WirelessHosts", "Request": "GetValue", "Value": []string{t.provider.xcode.wirelessHosts}}, true
+		}
+	}
+
+	return nil, false
+}
+
 func (t *LockDownTransport) Proxy() error {
 	_, lockdownToDevice, err := t.connectToDevice()
 	if err != nil {
@@ -66,10 +93,6 @@ func (t *LockDownTransport) Proxy() error {
 	}
 	defer lockdownToDevice.Close()
 	defer t.Close()
-
-	// useSessionSSL := false
-
-	wirelessHosts, _ := mackit.GetUdid()
 
 	for {
 		request, err := t.ReadMessage()
@@ -115,27 +138,10 @@ func (t *LockDownTransport) Proxy() error {
 			t.logger.Infoln("<-- response", decodedResponse)
 		}
 
-		// defaults delete com.apple.dt.Xcode DVTDeviceTokens
-		// defaults delete com.apple.dt.xcodebuild DVTDeviceTokens
-		// defaults delete com.apple.iTunes WirelessBuddyID
-		// 使得xcode中可以看到设备，这里的两个Value是从某台iPhoneX中抓取协议获取的，也许随便什么数值都行。
-		// 讨论细节：https://github.com/assistd/go-ios/issues/44#issuecomment-1387269808
-		if decodedRequest["Domain"] == wirelessLockdown && decodedRequest["Request"] == "GetValue" {
-			if decodedRequest["Key"] == "EnableWifiDebugging" {
-				decodedResponse = map[string]interface{}{"Domain": "com.apple.mobile.wireless_lockdown", "Key": "EnableWifiDebugging", "Request": "GetValue", "Value": true}
-				t.logger.Infoln("replace response to ", decodedResponse)
-			} else if decodedRequest["Key"] == "WirelessBuddyID" {
-				decodedResponse = map[string]interface{}{"Domain": "com.apple.mobile.wireless_lockdown", "Key": "WirelessBuddyID", "Request": "GetValue", "Value": "8E32E7B0-8D6D-4911-BF4E-D4370BF13872"}
-				t.logger.Infoln("replace response to ", decodedResponse)
-			} else if decodedRequest["Key"] == "EnableWifiConnections" {
-				decodedResponse = map[string]interface{}{"Domain": "com.apple.mobile.wireless_lockdown", "Key": "EnableWifiConnections", "Request": "GetValue", "Value": true}
-				t.logger.Infoln("replace response to ", decodedResponse)
-			}
-		} else if decodedRequest["Domain"] == developerdomain && decodedRequest["Request"] == "GetValue" {
-			if decodedRequest["Key"] == "WirelessHosts" {
-				decodedResponse = map[string]interface{}{"Domain": "com.apple.xcode.developerdomain", "Key": "WirelessHosts", "Request": "GetValue", "Value": []string{wirelessHosts}}
-				t.logger.Infoln("replace response to ", decodedResponse)
-			}
+		resp, ok := t.filter(decodedRequest)
+		if ok {
+			decodedResponse = resp
+			t.logger.Infoln("replace response to ", resp)
 		}
 
 		err = t.Send(decodedResponse)
@@ -144,7 +150,6 @@ func (t *LockDownTransport) Proxy() error {
 		}
 
 		if decodedResponse["EnableSessionSSL"] == true {
-			// useSessionSSL = true
 			if err := lockdownToDevice.EnableSessionSsl(t.pairRecord); err != nil {
 				t.logger.Errorln("enable ssl failed:", err)
 				return err
@@ -153,7 +158,6 @@ func (t *LockDownTransport) Proxy() error {
 				t.logger.Errorln("enable ssl server failed:", err)
 				return err
 			}
-			// decodedResponse["EnableSessionSSL"] = false
 		}
 
 		if decodedResponse["Request"] == "StartService" && decodedResponse["Error"] == nil {

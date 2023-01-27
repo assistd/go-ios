@@ -3,9 +3,11 @@ package ioskit
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 
 	"github.com/danielpaulus/go-ios/ios"
+	"github.com/danielpaulus/go-ios/wdbd/mackit"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,6 +19,12 @@ type Provider struct {
 	counter    int
 	pairRecord ios.PairRecord
 	mutex      sync.Mutex
+	xcode      *XcodeDebugging
+}
+
+type XcodeDebugging struct {
+	wirelessHosts   string
+	wirelessBuddyID string
 }
 
 // NewUsbmuxd create an Usbmuxd instance
@@ -61,22 +69,6 @@ func (p *Provider) spawnService(serviceInfo *PhoneService) {
 	}()
 }
 
-func (p *Provider) connectToDevice(deviceID int) (net.Conn, *ios.LockDownConnection, error) {
-	netConn, err := p.device.NewConn(nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("connect to device's usbmuxd failed:%v", err)
-	}
-
-	deviceConn := ios.NewDeviceConnectionWithConn(netConn)
-	usbmuxConn := ios.NewUsbMuxConnection(deviceConn)
-	lockdownToDevice, err := usbmuxConn.ConnectLockdown(deviceID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("connect to lockdown failed: %v", err)
-	}
-
-	return netConn, lockdownToDevice, nil
-}
-
 func (p *Provider) savePairFromRemote() error {
 	muxConn, err := ios.NewUsbMuxConnectionSimple()
 	if err != nil {
@@ -111,6 +103,68 @@ func (p *Provider) savePairFromRemote() error {
 	return err
 }
 
+func BuildDeviceInfo(values ios.AllValuesType) mackit.DeviceInfo {
+	entry := mackit.DeviceInfo{}
+	entry.UUID = values.UniqueDeviceID
+	entry.Serial = values.SerialNumber
+	entry.BuildVersion = values.BuildVersion
+	entry.WiFiAddress = values.WiFiAddress
+	entry.DeviceType = values.ProductType
+	entry.DeviceName = values.ProductName
+	entry.ProductVersion = values.ProductVersion
+	entry.HardwareModel = values.HardwareModel
+	entry.DeviceArchitecture = values.CPUArchitecture
+	entry.DeviceBluetoothMAC = values.BluetoothAddress
+	entry.ChipID = values.ChipID
+	return entry
+}
+
+func (p *Provider) EnableXcode() error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("only support on macOS")
+	}
+
+	// defaults read com.apple.dt.Xcode DVTDeviceTokens
+	udid := p.device.Serial
+	if ok := mackit.FindDevice(udid); !ok {
+		info, err := p.device.GetInfo()
+		if err != nil {
+			log.Errorln("get info failed:", err)
+			return err
+		}
+		err = mackit.AddDevice(BuildDeviceInfo(info))
+		if err != nil {
+			log.Errorln("add device failed:", err)
+			return err
+		}
+	}
+
+	// defaults read com.apple.iTunes WirelessBuddyID
+	wirelessBuddyID, err := mackit.ReadWirelessBuddyID()
+	if err != nil {
+		wirelessBuddyID = mackit.AllocateWriteWirelessID()
+		err = mackit.WriteWirelessBuddyID(wirelessBuddyID)
+		if err != nil {
+			log.Errorln("write WirelessBuddyID failed:", err)
+			return err
+		}
+	}
+
+	wirelessHosts, err := mackit.GetUdid()
+	if err != nil {
+		log.Errorln("write wirelessHosts failed:", err)
+		return err
+	}
+
+	p.xcode = &XcodeDebugging{
+		wirelessHosts:   wirelessHosts,
+		wirelessBuddyID: wirelessBuddyID,
+	}
+	log.Infoln("XcodeDebugging:", p.xcode)
+
+	return nil
+}
+
 // Run serve a tcp server, and do the message switching between remote usbmuxd with local one
 func (p *Provider) Run() error {
 	listener, err := net.Listen("tcp", p.socket)
@@ -119,6 +173,11 @@ func (p *Provider) Run() error {
 	}
 
 	err = p.savePairFromRemote()
+	if err != nil {
+		panic(err)
+	}
+
+	err = p.EnableXcode()
 	if err != nil {
 		panic(err)
 	}
