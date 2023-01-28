@@ -81,17 +81,32 @@ func main() {
 	// iPhone13pro 00008110-000515511491801E
 	remoteDevice := ioskit.NewRemoteDevice(
 		"192.168.0.192:27016",
-		"00008110-00142C9A3642801E")
+		"00008110-00142C9A3642801E",
+	)
 	log.Infof("connected to remote device: %+v", remoteDevice)
 
+	ip := "127.0.39.237"
 	remoteDevice.Listen(ioskit.NewDeviceListener(
 		func(ctx context.Context, d ioskit.DeviceEntry) {
 			go func() {
-				provider, err := ioskit.NewProvider("127.0.39.237:62078", remoteDevice)
+				provider, err := ioskit.NewProvider(ip, remoteDevice)
 				if err != nil {
 					panic(err)
 				}
 				panic(provider.Run())
+			}()
+
+			// start mdns proxy
+			go func() {
+				//TODO: Wait for provider running
+				time.Sleep(time.Second * 1)
+				values, err := remoteDevice.GetInfo()
+				if err != nil {
+					panic(err)
+				}
+
+				proxy := NewMdnsProxy(values.WiFiAddress, values.UniqueDeviceID, ip)
+				proxy.Register()
 			}()
 		},
 

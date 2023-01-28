@@ -28,7 +28,7 @@ type XcodeDebugging struct {
 }
 
 // NewUsbmuxd create an Usbmuxd instance
-func NewProvider(socket string, device *RemoteDevice) (*Provider, error) {
+func NewProvider(ip string, device *RemoteDevice) (*Provider, error) {
 	pair, err := device.ReadPairRecord()
 	if err != nil {
 		return nil, fmt.Errorf("read pair record failed:%v", err)
@@ -39,6 +39,7 @@ func NewProvider(socket string, device *RemoteDevice) (*Provider, error) {
 		return nil, fmt.Errorf("read device:%v", err)
 	}
 
+	socket := fmt.Sprintf("%s:62078", ip)
 	return &Provider{
 		socket:     socket,
 		device:     device,
