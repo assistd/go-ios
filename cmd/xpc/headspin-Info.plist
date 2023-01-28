@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleIdentifier</key> 
+  <string>io.headspin.DevTools.Helper</string>
+  <key>CFBundleName</key>
+  <string>HeadSpin DevTools Helper</string>
+  <key>CFBundleVersion</key>
+  <string>202212.68.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>202212.68.0</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2022 HeadSpin, Inc. All rights reserved.</string>
+  <key>SMAuthorizedClients</key>
+  <array>
+    <string>anchor apple generic and identifier "io.headspin.DevTools.CLI" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "V72KX8PA9J")</string>
+  </array>
+</dict>
+</plist>
