@@ -77,6 +77,14 @@ https://docs.qq.com/doc/DVXlZbUpCa0paTVVw
 - https://coderwall.com/p/l9jr5a/accessing-cocoa-objective-c-from-go-with-cgo
 - https://medium.com/using-go-in-mobile-apps/using-go-in-mobile-apps-part-4-calling-objective-c-from-go-8ec801d5d04e
 
+- https://zhuanlan.zhihu.com/p/349197066
+- https://chai2010.cn/advanced-go-programming-book/ch2-cgo/ch2-02-basic.html
+
+```
+$ cd cmd/xpc
+$ go build -x main.go
+```
+
 ## lipo
 
 lipo命令：https://ss64.com/osx/lipo.html
