@@ -35,9 +35,8 @@ def readPlistFromToolSection(toolPath, segmentName, sectionName):
         raise CheckException("tool %s / %s section unreadable" % (segmentName, sectionName), toolPath)
 
     # Convert that hex dump to an property list.
-    
     plistLines = plistDump.splitlines()
-    if len(plistLines) < 3 or plistLines[1] != ("Contents of (%s,%s) section" % (segmentName, sectionName)):
+    if len(plistLines) < 3 or plistLines[1].decode("utf-8") != ("Contents of (%s,%s) section" % (segmentName, sectionName)):
         raise CheckException("tool %s / %s section dump malformed (1)" % (segmentName, sectionName), toolPath)
     del plistLines[0:2]
 
@@ -47,11 +46,11 @@ def readPlistFromToolSection(toolPath, segmentName, sectionName):
             # line looks like this:
             #
             # '0000000100000b80\t3c 3f 78 6d 6c 20 76 65 72 73 69 6f 6e 3d 22 31 '
-            columns = line.split("\t")
+            columns = line.decode("utf-8").split("\t")
             assert len(columns) == 2
             for hexStr in columns[1].split():
                 bytes.append(int(hexStr, 16))
-        plist = plistlib.readPlistFromString(bytearray(bytes))
+        plist = plistlib.loads(bytearray(bytes))
     except:
         raise CheckException("tool %s / %s section dump malformed (2)" % (segmentName, sectionName), toolPath)
 
