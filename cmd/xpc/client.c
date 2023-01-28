@@ -34,21 +34,21 @@ int main(int argc, char *argv[])
     }
 
     xpc_connection_set_event_handler(conn, ^(xpc_object_t obj) {
-      printf("Received message in generic event handler: %p\n", obj);
-      printf("%s\n", xpc_copy_description(obj));
+      printf("[general] Received message in generic event handler: %p\n", obj);
+      printf("[general] %s\n", xpc_copy_description(obj));
     });
 
     xpc_connection_resume(conn);
     xpc_connection_send_message(conn, msg);
 
     xpc_connection_send_message_with_reply(conn, msg, NULL, ^(xpc_object_t resp) {
-      printf("Received second message: %p\n", resp);
-      printf("%s\n", xpc_copy_description(resp));
+      printf("[2]: Received second message: %p\n", resp);
+      printf("[2]: %s\n", xpc_copy_description(resp));
     });
 
     xpc_connection_send_message_with_reply(conn, msg, NULL, ^(xpc_object_t resp) {
-      printf("Received third message: %p\n", resp);
-      printf("%s\n", xpc_copy_description(resp));
+      printf("[3] Received third message: %p\n", resp);
+      printf("[3] %s\n", xpc_copy_description(resp));
     });
 
     dispatch_main();
