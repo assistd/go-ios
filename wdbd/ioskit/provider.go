@@ -178,9 +178,8 @@ func (p *Provider) Run() error {
 		panic(err)
 	}
 
-	err = p.EnableXcode()
-	if err != nil {
-		panic(err)
+	if runtime.GOOS == "darwin" {
+		err = p.EnableXcode()
 	}
 
 	for {
