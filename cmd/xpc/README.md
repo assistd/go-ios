@@ -71,6 +71,16 @@ $ ./wdb com.apple.myservice
 【腾讯文档】macOS app签名
 https://docs.qq.com/doc/DVXlZbUpCa0paTVVw
 
+## 疑点
+
+1. 微软的Helper文件没有SMAuthorizedClients字段
+2. 测试发现client程序不签名也能以root方式拉起xpc-service(其中info.plist嵌入了签名)
+
+https://stackoverflow.com/a/35111582
+
+那么我修改client程序，能否拉起headspin的Helper？
+测试结论：./client io.headspin.DevTools.Helper，果然成功的激活了headspin的Helper程序
+
 ## cgo
 
 - https://github.com/golang/go/issues/28832
