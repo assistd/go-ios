@@ -67,55 +67,50 @@ func parseLine(output []byte) ([]byte, error) {
 	return bytes.Join(out, nil), nil
 }
 
-func parse(segname, sectname, binary string) (string, error) {
+func parse(segname, sectname, binary string) ([][]byte, error) {
 	cmd := exec.Command("otool", "-s", segname, sectname, binary)
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	bytelines := bytes.Split(output, []byte{'\n'})
+	lists := make([][]byte, 0)
+	buf := new(bytes.Buffer)
+	bytelines := bytes.Split(bytes.TrimSpace(output), []byte{'\n'})
 
 	flag := 0
-	// var archType ArchTye
 	count := 0
 	for _, byteline := range bytelines {
-		if bytes.Contains(byteline, []byte("architecture")) {
-			arch, err := parse_arch(byteline)
-			if err != nil {
-				return "", fmt.Errorf("invalid line:%v", string(byteline))
+		// fmt.Println(string(byteline))
+		if bytes.Contains(byteline, []byte(binary)) {
+			flag = 1
+			lists = append(lists, buf.Bytes())
+			buf.Reset()
+			if count > 0 {
+				fmt.Println("")
 			}
-
-			if arch == "x86_64" || arch == "arm64" {
-				flag = 1
-				if count > 0 {
-					fmt.Println("")
-				}
-				fmt.Println(string(byteline))
-				count++
-			} else {
-				return "", fmt.Errorf("unknown arch: invalid line:%v", string(byteline))
-			}
-
+			fmt.Println(string(byteline))
+			count++
 			continue
 		}
 
 		switch flag {
 		case 1:
 			if !bytes.Contains(byteline, []byte("Contents of")) {
-				return "", fmt.Errorf("invalid format: line:%v", string(byteline))
+				return nil, fmt.Errorf("invalid format: should be 'Contents of ...': line:%v", string(byteline))
 			}
 			flag = 2
 		case 2:
 			found, err := parseLine(byteline)
 			if err != nil {
-				return "", fmt.Errorf("invalid format: line:%v", string(byteline))
+				return nil, fmt.Errorf("invalid format: line:%v", byteline)
 			}
+			buf.Write(found)
 			fmt.Print(string(found))
 		}
 	}
 
-	return "", nil
+	return lists, nil
 }
 
 var segname = flag.String("segname", "__TEXT", "segment name")
@@ -128,5 +123,8 @@ func main() {
 		flag.Usage()
 		return
 	}
-	parse(*segname, *sectname, *binary)
+	_, err := parse(*segname, *sectname, *binary)
+	if err != nil {
+		panic(err)
+	}
 }
