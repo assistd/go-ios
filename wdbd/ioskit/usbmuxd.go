@@ -73,7 +73,7 @@ func (a *Usbmuxd) Run() error {
 			return fmt.Errorf("usbmuxd: fail to listen accept: %v", err)
 		}
 
-		t := NewTransport(conn, a)
+		t := NewTransport(conn, a.remote)
 		a.mutex.Lock()
 		a.transports[t] = struct{}{}
 		a.mutex.Unlock()
