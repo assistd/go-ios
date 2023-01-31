@@ -16,19 +16,19 @@ import (
 var transportId int32
 
 type Transport struct {
+	usbmuxd    *Usbmuxd
 	id         int32
-	socket     string
 	clientConn net.Conn
 	logger     *log.Entry
 }
 
 // NewTransport init transport
-func NewTransport(socket string, clientConn net.Conn) *Transport {
+func NewTransport(clientConn net.Conn, usbmuxd *Usbmuxd) *Transport {
 	transportId++
 	return &Transport{
 		id:         transportId,
-		socket:     socket,
 		clientConn: clientConn,
+		usbmuxd:    usbmuxd,
 		logger:     log.WithField("id", transportId),
 	}
 }
@@ -102,11 +102,11 @@ func (t *Transport) proxyMuxConnection(muxOnUnixSocket *ios.UsbMuxConnection) {
 			// pairId := decodedRequest["PairRecordID"].(string)
 			fallthrough
 		case MuxMessageTypeConnect:
-			remoteDevice := globalUsbmuxd.GetRemoteDevice()
+			remoteDevice := t.usbmuxd.GetRemoteDevice()
 			if muxToDevice == nil {
 				devStream, err := remoteDevice.NewConn(nil)
 				if err != nil {
-					t.logger.Errorf("transport: connect to %v failed: %v", t.socket, err)
+					t.logger.Errorf("transport: connect to %v failed: %v", t.usbmuxd.socket, err)
 					muxOnUnixSocket.Close()
 					return
 				}
@@ -138,7 +138,7 @@ func buildMuxdMsg(tag uint32, data interface{}) ios.UsbMuxMessage {
 }
 
 func (t *Transport) handleListDevices(tag uint32, muxOnUnixSocket *ios.UsbMuxConnection) {
-	d, err := globalUsbmuxd.remote.ListDevices()
+	d, err := t.usbmuxd.remote.ListDevices()
 	var list []ios.DeviceEntry
 	if err == nil {
 		list = make([]ios.DeviceEntry, 1)
@@ -213,13 +213,13 @@ func (t *Transport) handleListen(tag uint32, muxOnUnixSocket *ios.UsbMuxConnecti
 	}
 
 	// trigger onAdd/onRemove
-	d, err := globalUsbmuxd.remote.ListDevices()
+	d, err := t.usbmuxd.remote.ListDevices()
 	if err == nil {
 		t.logger.Infof("--> %+v", d)
 		onAdd(nil, d)
 	}
 
-	unListen := globalUsbmuxd.remote.registry.Listen(NewDeviceListener(onAdd, onRemove))
+	unListen := t.usbmuxd.remote.registry.Listen(NewDeviceListener(onAdd, onRemove))
 	defer unListen()
 	defer cleanup()
 

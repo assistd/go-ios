@@ -10,10 +10,6 @@ import (
 	"sync"
 )
 
-var (
-	globalUsbmuxd *Usbmuxd
-)
-
 type Usbmuxd struct {
 	socket     string
 	remote     *RemoteDevice // serial -> RemoteDevice
@@ -28,10 +24,6 @@ func NewUsbmuxd(socket string, device *RemoteDevice) *Usbmuxd {
 		transports: make(map[*Transport]struct{}),
 		remote:     device,
 	}
-}
-
-func SetGlobal(usbmuxd *Usbmuxd) {
-	globalUsbmuxd = usbmuxd
 }
 
 // ListenAddr return inner serving port
@@ -81,7 +73,7 @@ func (a *Usbmuxd) Run() error {
 			return fmt.Errorf("usbmuxd: fail to listen accept: %v", err)
 		}
 
-		t := NewTransport(a.socket, conn)
+		t := NewTransport(conn, a)
 		a.mutex.Lock()
 		a.transports[t] = struct{}{}
 		a.mutex.Unlock()

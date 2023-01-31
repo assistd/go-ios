@@ -78,7 +78,6 @@ func main() {
 	}()
 
 	muxd := ioskit.NewUsbmuxd(*usbmuxdPath, remoteDevice)
-	ioskit.SetGlobal(muxd)
 
 	log.Panicln(muxd.Run())
 }
