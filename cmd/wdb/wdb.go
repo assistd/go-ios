@@ -21,20 +21,12 @@ var addr = flag.String("addr", "", "remote usbmuxd addr")
 var udid = flag.String("udid", "", "remote device udid")
 var logPath = flag.String("log_path", "/var/log/", "log directory")
 
-func initLog() {
-	/*
-		if _, err := os.Stat(*logPath); os.IsNotExist(err) {
-			err := os.MkdirAll(filepath.Dir(*logPath), 0755)
-			if err != nil {
-				panic(fmt.Sprintf("mkdir %v error %v", *logPath, err))
-			}
-		}
-	*/
-	savePath := fmt.Sprintf("%v/wdb", *logPath)
+func initLog(udid string) {
+	savePath := fmt.Sprintf("%v/wdb/%v", *logPath, udid)
 	p := savePath + ".%Y%m%d.log"
 	writer, _ := rotatelogs.New(p,
 		rotatelogs.WithLinkName(savePath),
-		rotatelogs.WithMaxAge(time.Duration(7)*time.Hour*24),
+		rotatelogs.WithMaxAge(time.Duration(3)*time.Hour*24),
 		rotatelogs.WithRotationTime(time.Hour*24),
 		rotatelogs.WithLinkName(""),
 	)
@@ -66,11 +58,11 @@ func initUsbmuxd() {
 
 func main() {
 	flag.Parse()
-	initLog()
-	initUsbmuxd()
 	if *addr == "" || *udid == "" {
 		log.Panicln("addr param and udid param are required")
 	}
+	initLog(*udid)
+	initUsbmuxd()
 	remoteDevice := ioskit.NewRemoteDevice(*addr, *udid)
 	log.Infof("connected to remote device: %+v", remoteDevice)
 	go func() {
