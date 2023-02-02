@@ -46,7 +46,7 @@ func attachedMessageToDevice(msg ios.AttachedMessage) ios.DeviceEntry {
 	}
 }
 
-func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, interval time.Duration) error {
+func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, serial string, interval time.Duration) error {
 	for {
 		c, err := net.Dial(a.Network, a.Addr)
 		if err != nil {
@@ -73,11 +73,13 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, interval ti
 				deviceConn.Close()
 				break
 			}
-
 			log.Infoln("ios-monitor: msg: ", msg)
 
 			switch msg.MessageType {
 			case ListenMessageAttached:
+				if msg.Properties.SerialNumber != serial {
+					continue
+				}
 				deviceSerial[msg.DeviceID] = msg.Properties.SerialNumber
 				dCtx, cancel := context.WithCancel(ctx)
 
@@ -90,6 +92,9 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, interval ti
 				r.AddDevice(dCtx, DeviceEntry(attachedMessageToDevice(msg)))
 			case ListenMessageDetached:
 				msg.Properties.SerialNumber = deviceSerial[msg.DeviceID]
+				if msg.Properties.SerialNumber != serial {
+					continue
+				}
 				cacheMutex.Lock()
 				dCtx, _ := cancelMap[msg.DeviceID]
 				r.RemoveDevice(dCtx.ctx, DeviceEntry(attachedMessageToDevice(msg)))

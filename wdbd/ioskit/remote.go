@@ -32,7 +32,7 @@ func (r *RemoteDevice) Listen(l DeviceListener) func() {
 
 func (r *RemoteDevice) Monitor(ctx context.Context) error {
 	kit, _ := NewDeviceMonitor("tcp", r.Addr)
-	err := kit.Monitor(ctx, r.registry, -1)
+	err := kit.Monitor(ctx, r.registry, r.Serial, -1)
 	return err
 }
 
