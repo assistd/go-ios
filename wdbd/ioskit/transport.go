@@ -158,17 +158,17 @@ func (t *Transport) forward(ctx context.Context, devConn net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		io.Copy(devConn, t.clientConn)
+		_, err := io.Copy(devConn, t.clientConn)
 		devConn.Close()
-		t.logger.Errorf("forward: close clientConn <-- deviceConn")
+		t.logger.Errorf("forward: close clientConn <-- deviceConn err:%v", err)
 		wg.Done()
 	}()
 
 	wg.Add(1)
 	go func() {
-		io.Copy(t.clientConn, devConn)
+		_, err := io.Copy(t.clientConn, devConn)
 		t.clientConn.Close()
-		t.logger.Errorf("forward: close clientConn --> deviceConn")
+		t.logger.Errorf("forward: close clientConn --> deviceConn err:%v", err)
 		wg.Done()
 	}()
 
