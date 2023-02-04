@@ -363,7 +363,7 @@ func (fs *Fsync) RmTree(path string) error {
 				continue
 			}
 			if info.IsDir() {
-				fs.RmTree(filePath)
+				err = fs.RmTree(filePath)
 				if err != nil {
 					return err
 				}
