@@ -11,12 +11,14 @@ require (
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40
+	github.com/prife/keepaliveconn v0.0.0-20230209075304-1153ac926d66
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/afero v1.8.2
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa
 	howett.net/plist v0.0.0-20200419221736-3b63eb3a43b5
+
 )
 
 require (
