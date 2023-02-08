@@ -4,12 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
 	"path"
 	"runtime"
 	"time"
 
-	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/rifflock/lfshook"
@@ -19,7 +17,9 @@ import (
 var usbmuxdPath = flag.String("usbmuxd-path", "unix:/var/run/usbmuxd", "usbmuxd path")
 var addr = flag.String("addr", "", "remote usbmuxd addr")
 var udid = flag.String("udid", "", "remote device udid")
-var logPath = flag.String("log_path", "/var/log/", "log directory")
+var logPath = flag.String("log-path", "/var/log/", "log directory")
+var mode = flag.String("mode", "wdbd", "wdb wdbd")
+var keepAlive = flag.Bool("keepalive", false, "need keepalive")
 
 func initLog(udid string) {
 	savePath := fmt.Sprintf("%v/wdb/%v", *logPath, udid)
@@ -46,30 +46,24 @@ func initLog(udid string) {
 	log.AddHook(lfshook.NewHook(writer, formatter))
 }
 
-func initUsbmuxd() {
-	// 处理已存在的usbmuxd socket
-	if runtime.GOOS != "windows" {
-		if fileInfo, _ := os.Stat(ios.DefaultUsbmuxdSocket); fileInfo != nil {
-			bak := fmt.Sprintf("%v.bak", ios.DefaultUsbmuxdSocket)
-			_ = os.Rename(ios.DefaultUsbmuxdSocket, bak)
-		}
-	}
-}
-
 func main() {
 	flag.Parse()
 	if *addr == "" || *udid == "" {
 		log.Panicln("addr param and udid param are required")
 	}
 	initLog(*udid)
-	initUsbmuxd()
 	remoteDevice := ioskit.NewRemoteDevice(*addr, *udid)
 	log.Infof("connected to remote device: %+v", remoteDevice)
-	go func() {
-		log.Panicln(remoteDevice.Monitor(context.Background()))
-	}()
+	muxd := ioskit.NewUsbmuxd(*usbmuxdPath, *keepAlive, remoteDevice)
+	switch *mode {
+	case "wdb":
+		log.Panicln(muxd.Forward())
+	default:
+		go func() {
+			log.Panicln(remoteDevice.Monitor(context.Background()))
+		}()
 
-	muxd := ioskit.NewUsbmuxd(*usbmuxdPath, remoteDevice)
+		log.Panicln(muxd.Run())
+	}
 
-	log.Panicln(muxd.Run())
 }
