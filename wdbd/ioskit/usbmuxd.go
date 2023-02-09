@@ -94,14 +94,16 @@ func (a *Usbmuxd) Forward() error {
 
 func (a *Usbmuxd) copy(local, remote net.Conn) {
 	log.Infof("start to iocopy [%v]->[%v]", local.RemoteAddr().String(), local.RemoteAddr().String())
+	if a.keepAlive {
+		remote = keepaliveconn.New(remote, time.Hour)
+	}
 	go func() {
 		defer func() {
 			_ = local.Close()
 		}()
 		var err error
 		if a.keepAlive {
-			kpRemote := keepaliveconn.New(remote, time.Hour)
-			_, err = keepaliveconn.Copy(local, kpRemote)
+			_, err = keepaliveconn.Copy(local, remote.(*keepaliveconn.KeepaliveConn))
 		} else {
 			_, err = io.Copy(local, remote)
 		}
