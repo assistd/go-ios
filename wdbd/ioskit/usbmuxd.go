@@ -2,13 +2,11 @@ package ioskit
 
 import (
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios"
 	"github.com/prife/keepaliveconn"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -41,16 +39,15 @@ func (a *Usbmuxd) Listener() (net.Listener, error) {
 	}
 
 	network, addr := a.socket[0:pos], a.socket[pos+1:]
-	if network == "unix" && runtime.GOOS != "windows" {
-		if fileInfo, _ := os.Stat(ios.DefaultUsbmuxdSocket); fileInfo != nil {
-			bak := fmt.Sprintf("%v.bak", ios.DefaultUsbmuxdSocket)
-			_ = os.Rename(ios.DefaultUsbmuxdSocket, bak)
-		}
-		os.Chmod(addr, 0777)
+	if network == "unix" {
+		os.Remove(addr)
 	}
 	listener, err := net.Listen(network, addr)
 	if err != nil {
 		return nil, fmt.Errorf("usbmuxd: fail to listen on: %v, error:%v", a.socket, err)
+	}
+	if network == "unix" {
+		os.Chmod(addr, 0777)
 	}
 	return listener, nil
 }
