@@ -21,8 +21,8 @@ var logPath = flag.String("log-path", "/var/log/", "log directory")
 var mode = flag.String("mode", "wdbd", "wdb wdbd")
 var keepAlive = flag.Bool("keepalive", false, "need keepalive")
 
-func initLog(udid string) {
-	savePath := fmt.Sprintf("%v/wdb/%v", *logPath, udid)
+func initLog(name string) {
+	savePath := fmt.Sprintf("%v/wdb/%v", logPath, name)
 	p := savePath + ".%Y%m%d.log"
 	writer, _ := rotatelogs.New(p,
 		rotatelogs.WithLinkName(savePath),
@@ -48,22 +48,32 @@ func initLog(udid string) {
 
 func main() {
 	flag.Parse()
-	if *addr == "" || *udid == "" {
-		log.Panicln("addr param and udid param are required")
+
+	file := *udid
+	if file == "" {
+		file = "wdb"
 	}
-	initLog(*udid)
+	initLog(file)
+
 	remoteDevice := ioskit.NewRemoteDevice(*addr, *udid)
 	log.Infof("connected to remote device: %+v", remoteDevice)
 	muxd := ioskit.NewUsbmuxd(*usbmuxdPath, *keepAlive, remoteDevice)
+
 	switch *mode {
 	case "wdb":
+		if *addr == "" {
+			log.Panicln("addr param are required")
+		}
 		log.Panicln(muxd.Forward())
-	default:
+	case "wdbd":
+		if *addr == "" || *udid == "" {
+			log.Panicln("addr param and udid param are required")
+		}
 		go func() {
 			log.Panicln(remoteDevice.Monitor(context.Background()))
 		}()
-
 		log.Panicln(muxd.Run())
+	default:
+		log.Panicln("invalid mode")
 	}
-
 }
