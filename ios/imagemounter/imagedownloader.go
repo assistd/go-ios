@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const repo = "https://github.com/JinjunHan/iOSDeviceSupport/raw/master/iOSDeviceSupport/%s.zip"
+const repo = "https://api.cloudtest.qq.com/iOSDeviceSupport/%s.zip"
 const imagepath = "devimages"
 const developerDiskImageDmg = "DeveloperDiskImage.dmg"
 
