@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"path"
 	"runtime"
 	"time"
@@ -17,15 +18,14 @@ import (
 var usbmuxdPath = flag.String("usbmuxd-path", "unix:/var/run/usbmuxd", "usbmuxd path")
 var addr = flag.String("addr", "", "remote usbmuxd addr")
 var udid = flag.String("udid", "", "remote device udid")
-var logPath = flag.String("log-path", "/var/log/", "log directory")
+var logDir = flag.String("log-path", "/var/log/", "log directory")
 var mode = flag.String("mode", "wdbd", "wdb wdbd")
 var keepAlive = flag.Bool("keepalive", false, "need keepalive")
 
-func initLog(name string) {
-	savePath := fmt.Sprintf("%v/wdb/%v", logPath, name)
-	p := savePath + ".%Y%m%d.log"
+func initLog(logPath string) {
+	p := logPath + ".%Y%m%d.log"
 	writer, _ := rotatelogs.New(p,
-		rotatelogs.WithLinkName(savePath),
+		rotatelogs.WithLinkName(logPath),
 		rotatelogs.WithMaxAge(time.Duration(3)*time.Hour*24),
 		rotatelogs.WithRotationTime(time.Hour*24),
 		rotatelogs.WithLinkName(""),
@@ -43,6 +43,7 @@ func initLog(name string) {
 	log.SetReportCaller(true)
 	log.SetFormatter(formatter)
 	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
 	log.AddHook(lfshook.NewHook(writer, formatter))
 }
 
@@ -53,8 +54,10 @@ func main() {
 	if file == "" {
 		file = "wdb"
 	}
-	initLog(file)
+	logPath := fmt.Sprintf("%v/wdb/%v", *logDir, file)
+	initLog(logPath)
 
+	log.Info("== wdb entry ==")
 	remoteDevice := ioskit.NewRemoteDevice(*addr, *udid)
 	log.Infof("connected to remote device: %+v", remoteDevice)
 	muxd := ioskit.NewUsbmuxd(*usbmuxdPath, *keepAlive, remoteDevice)
