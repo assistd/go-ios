@@ -26,7 +26,7 @@ func initLog(logPath string) {
 	p := logPath + ".%Y%m%d.log"
 	writer, _ := rotatelogs.New(p,
 		rotatelogs.WithLinkName(logPath),
-		rotatelogs.WithMaxAge(time.Duration(3)*time.Hour*24),
+		rotatelogs.WithMaxAge(time.Duration(10)*time.Hour*24),
 		rotatelogs.WithRotationTime(time.Hour*24),
 		rotatelogs.WithLinkName(""),
 	)
