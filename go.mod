@@ -11,7 +11,7 @@ require (
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40
-	github.com/prife/keepaliveconn v0.0.0-20230209075304-1153ac926d66
+	github.com/prife/keepaliveconn v0.0.0-20230214031850-59bf634a724d
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/afero v1.8.2

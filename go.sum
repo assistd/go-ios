@@ -160,6 +160,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prife/keepaliveconn v0.0.0-20230209075304-1153ac926d66 h1:uTVs6hhGYVlS66E/dFMDB91WwVc8wjvzbYjHtv16vFE=
 github.com/prife/keepaliveconn v0.0.0-20230209075304-1153ac926d66/go.mod h1:sDUd7XKQlGl8aNzgUBIoisf8QBdTTuaJrt2K2J83UMk=
+github.com/prife/keepaliveconn v0.0.0-20230214031850-59bf634a724d h1:ewSBpY7EM1xMmfsvgH+78ELCSWYIfa3nvghurpQTd90=
+github.com/prife/keepaliveconn v0.0.0-20230214031850-59bf634a724d/go.mod h1:sDUd7XKQlGl8aNzgUBIoisf8QBdTTuaJrt2K2J83UMk=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5 h1:mZHayPoR0lNmnHyvtYjDeq0zlVHn9K/ZXoy17ylucdo=
 github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5/go.mod h1:GEXHk5HgEKCvEIIrSpFI3ozzG5xOKA2DVlEX/gGnewM=
