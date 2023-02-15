@@ -18,7 +18,7 @@ import (
 var usbmuxdPath = flag.String("usbmuxd-path", "unix:/var/run/usbmuxd", "usbmuxd path")
 var addr = flag.String("addr", "", "remote usbmuxd addr")
 var udid = flag.String("udid", "", "remote device udid")
-var logDir = flag.String("log-path", "/var/log/", "log directory")
+var logDir = flag.String("log-path", "/var/log/wdb", "log directory")
 var mode = flag.String("mode", "wdbd", "wdb wdbd")
 var keepAlive = flag.Bool("keepalive", false, "need keepalive")
 
@@ -54,7 +54,7 @@ func main() {
 	if file == "" {
 		file = "wdb"
 	}
-	logPath := fmt.Sprintf("%v/wdb/%v", *logDir, file)
+	logPath := fmt.Sprintf("%v/%v", *logDir, file)
 	initLog(logPath)
 
 	log.Info("== wdb entry ==")
