@@ -20,11 +20,17 @@ type (
 	}
 )
 
+type Ctx struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // Registry is holds a list of registered devices. It provides methods for
 // listening for devices that are added to and removed from the device.
 type Registry struct {
 	sync.Mutex
 	devices    []DeviceEntry
+	ctxMap     map[int]Ctx
 	properties map[propertyKey]interface{}
 	listeners  map[DeviceListener]struct{}
 }
@@ -138,8 +144,16 @@ func (r *Registry) AddDevice(ctx context.Context, d DeviceEntry) {
 		if t == d {
 			return // already added
 		}
+
+		if t.Properties.SerialNumber == d.Properties.SerialNumber && t.DeviceID != d.DeviceID {
+			log.Panic("registry: add same device with different DevicdID %v, %v:%v",
+				d.Properties.SerialNumber, d.Properties.SerialNumber, t.DeviceID)
+		}
 	}
-	log.Infof("Adding new device, id:%v, udid:%v", d.DeviceID, d.Properties.SerialNumber)
+
+	log.Infof("registry: adding new device, id:%v, udid:%v", d.DeviceID, d.Properties.SerialNumber)
+	ctx, cancel := context.WithCancel(ctx)
+	r.ctxMap[d.DeviceID] = Ctx{ctx, cancel}
 	r.devices = append(r.devices, d)
 
 	for l := range r.listeners {
@@ -148,19 +162,46 @@ func (r *Registry) AddDevice(ctx context.Context, d DeviceEntry) {
 }
 
 // RemoveDevice unregisters the device d with the Registry.
-func (r *Registry) RemoveDevice(ctx context.Context, d DeviceEntry) {
+func (r *Registry) RemoveDevice(d DeviceEntry) {
 	r.Lock()
 	defer r.Unlock()
 	for i, t := range r.devices {
 		if t.DeviceID == d.DeviceID || t.Properties.SerialNumber == d.Properties.SerialNumber {
-			log.Infof("Removing existing device %+v", t)
+			log.Infof("registry: removing existing device %v", t.DeviceID, t.Properties.SerialNumber)
 			copy(r.devices[i:], r.devices[i+1:])
 			r.devices = r.devices[:len(r.devices)-1]
+
+			// Invoke listeners
+			ctx := r.ctxMap[t.DeviceID]
 			for l := range r.listeners {
-				l.OnDeviceRemoved(ctx, d)
+				l.OnDeviceRemoved(ctx.ctx, d)
 			}
+			ctx.cancel()
+
+			// Delete ctx map
+			delete(r.ctxMap, t.DeviceID)
+			return
 		}
 	}
+}
+
+// RemoveAll unregisters all devices in the Registry.
+func (r *Registry) RemoveAll() {
+	r.Lock()
+	defer r.Unlock()
+	for i, t := range r.devices {
+		log.Infof("registry: removing all [%d]:%v,%v", i, t.DeviceID, t.Properties.SerialNumber)
+		ctx := r.ctxMap[t.DeviceID]
+		for l := range r.listeners {
+			l.OnDeviceRemoved(ctx.ctx, t)
+		}
+		ctx.cancel()
+	}
+
+	for k := range r.ctxMap {
+		delete(r.ctxMap, k)
+	}
+	r.devices = make([]DeviceEntry, 0)
 }
 
 // DeviceProperty returns the property with the key k for the device d,

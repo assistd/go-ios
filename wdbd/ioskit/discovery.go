@@ -4,18 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
 	log "github.com/sirupsen/logrus"
-)
-
-var (
-	// cache is a map of device serials to fully resolved bindings.
-	cacheMutex   sync.Mutex
-	cancelMap    = map[int]Ctx{}
-	deviceSerial = make(map[int]string)
 )
 
 type DeviceMonitor interface {
@@ -33,11 +25,6 @@ func NewDeviceMonitor(network, addr string) (*IOSDeviceMonitor, error) {
 		Network: network,
 		Addr:    addr,
 	}, nil
-}
-
-type Ctx struct {
-	cancel context.CancelFunc
-	ctx    context.Context
 }
 
 func attachedMessageToDevice(msg ios.AttachedMessage) ios.DeviceEntry {
@@ -72,16 +59,8 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, serial stri
 			if err != nil {
 				log.Errorln("ios-monitor: failed decoding MuxMessage", msg, err)
 				deviceConn.Close()
-
 				// usbmuxd on Remote's macOS may restart, all DeviceID will be resigned.
-				d, err := r.DeviceBySerial(serial)
-				if err != nil {
-					cacheMutex.Lock()
-					dCtx := cancelMap[d.DeviceID]
-					r.RemoveDevice(dCtx.ctx, d)
-					dCtx.cancel()
-					cacheMutex.Unlock()
-				}
+				r.RemoveAll()
 				break
 			}
 			log.Infoln("ios-monitor: msg: ", msg)
@@ -91,26 +70,9 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, serial stri
 				if msg.Properties.SerialNumber != serial {
 					continue
 				}
-				deviceSerial[msg.DeviceID] = msg.Properties.SerialNumber
-				dCtx, cancel := context.WithCancel(ctx)
-
-				cacheMutex.Lock()
-				cancelMap[msg.DeviceID] = Ctx{
-					cancel: cancel,
-					ctx:    dCtx,
-				}
-				cacheMutex.Unlock()
-				r.AddDevice(dCtx, DeviceEntry(attachedMessageToDevice(msg)))
+				r.AddDevice(ctx, DeviceEntry(attachedMessageToDevice(msg)))
 			case ListenMessageDetached:
-				msg.Properties.SerialNumber = deviceSerial[msg.DeviceID]
-				if msg.Properties.SerialNumber != serial {
-					continue
-				}
-				cacheMutex.Lock()
-				dCtx, _ := cancelMap[msg.DeviceID]
-				r.RemoveDevice(dCtx.ctx, DeviceEntry(attachedMessageToDevice(msg)))
-				dCtx.cancel()
-				cacheMutex.Unlock()
+				r.RemoveDevice(DeviceEntry(attachedMessageToDevice(msg)))
 			case ListenMessagePaired:
 				// TODO:
 			default:
