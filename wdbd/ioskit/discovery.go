@@ -3,11 +3,12 @@ package ioskit
 import (
 	"context"
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -71,6 +72,16 @@ func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, serial stri
 			if err != nil {
 				log.Errorln("ios-monitor: failed decoding MuxMessage", msg, err)
 				deviceConn.Close()
+
+				// usbmuxd on Remote's macOS may restart, all DeviceID will be resigned.
+				d, err := r.DeviceBySerial(serial)
+				if err != nil {
+					cacheMutex.Lock()
+					dCtx := cancelMap[d.DeviceID]
+					r.RemoveDevice(dCtx.ctx, d)
+					dCtx.cancel()
+					cacheMutex.Unlock()
+				}
 				break
 			}
 			log.Infoln("ios-monitor: msg: ", msg)
