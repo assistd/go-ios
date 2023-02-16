@@ -233,7 +233,8 @@ func (c *Connection) Uninstall(bundleId string) error {
 
 func checkFinished(dict map[string]interface{}, c InstallationProxyCmd) (bool, error) {
 	if val, ok := dict["Error"]; ok {
-		return true, fmt.Errorf("received %v error: %v", c, val)
+		description, _ := dict["ErrorDescription"]
+		return true, fmt.Errorf("received %v error: %v, description: %v", c, val, description)
 	}
 	if val, ok := dict["Status"]; ok {
 		if "Complete" == val {
