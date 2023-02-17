@@ -23,6 +23,9 @@ type ProcessInfo struct {
 //ProcessList returns a []ProcessInfo, one for each process running on the iOS device
 func (d DeviceInfoService) ProcessList() ([]ProcessInfo, error) {
 	resp, err := d.channel.MethodCall("runningProcesses")
+	if err != nil {
+		return make([]ProcessInfo, 0), err
+	}
 	result := mapToProcInfo(resp.Payload[0].([]interface{}))
 	return result, err
 }
