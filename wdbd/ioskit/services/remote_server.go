@@ -38,13 +38,27 @@ func NewRemoteServer(device ios.DeviceEntry, name string) (*RemoteServer, error)
 			Name:        name,
 			IsDeveloper: true,
 		},
+		supportedIdentifiers: make(map[string]interface{}),
+		channelCache:         make(map[string]Channel),
+		channelMessages:      make(map[ChannelCode][]*dtx.Message),
 	}
 	err := s.init(device)
 	return s, err
 }
 
 func (b *RemoteServer) Init(device ios.DeviceEntry) error {
-	return b.init(device)
+	b.supportedIdentifiers = make(map[string]interface{})
+	b.channelCache = make(map[string]Channel)
+	b.channelMessages = make(map[ChannelCode][]*dtx.Message)
+
+	if err := b.init(device); err != nil {
+		return err
+	}
+	if err := b.PerformHandshake(); err != nil {
+		b.Close()
+		return err
+	}
+	return nil
 }
 
 func (r *RemoteServer) PerformHandshake() error {
@@ -161,9 +175,11 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*dtx.Message, error) {
 			return nil, err
 		}
 
-		if m.Identifier > r.curMessage {
-			log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", m.Identifier, r.curMessage)
-			panic("TODO")
+		if m.ConversationIndex == 0 {
+			if m.Identifier > r.curMessage {
+				log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", m.Identifier, r.curMessage)
+				r.curMessage = m.Identifier
+			}
 		}
 
 		array = append(array, &m)
