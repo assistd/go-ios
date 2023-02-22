@@ -8,9 +8,12 @@
 package services
 
 import (
+	"errors"
+
 	"github.com/danielpaulus/go-ios/ios"
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
+	log "github.com/sirupsen/logrus"
 )
 
 type ChannelCode int
@@ -19,8 +22,8 @@ type RemoteServer struct {
 	supportedIdentifiers map[string]interface{}
 	lastChannelCode      ChannelCode
 	curMessage           int
-	channelCache         map[string]interface{}
-	// channelessages       map[ChannelCode]
+	channelCache         map[string]Channel
+	channelMessages      map[ChannelCode][]*dtx.Message
 }
 
 const (
@@ -40,11 +43,11 @@ func NewRemoteServer(device ios.DeviceEntry, name string) (*RemoteServer, error)
 	return s, err
 }
 
-func (r *RemoteServer) Init() {
-
+func (b *RemoteServer) Init(device ios.DeviceEntry) error {
+	return b.init(device)
 }
 
-func (r *RemoteServer) performHandshake() error {
+func (r *RemoteServer) PerformHandshake() error {
 	// https://github.com/doronz88/pymobiledevice3/blob/ecd4b36716837fbae72e1c31474f3ec9d6edeeca/pymobiledevice3/services/remote_server.py#L261
 	args := map[string]interface{}{
 		"com.apple.private.DTXBlockCompression": uint64(0),
@@ -52,10 +55,27 @@ func (r *RemoteServer) performHandshake() error {
 	}
 	auxiliary := dtx.NewPrimitiveDictionary()
 	auxiliary.AddNsKeyedArchivedObject(args)
-	return r.sendMessage(DtxBroadcastChannelId, "_notifyOfPublishedCapabilities:", auxiliary, false)
+	method := "_notifyOfPublishedCapabilities:"
+	err := r.SendMessage(DtxBroadcastChannelId, method, auxiliary, false)
+	if err != nil {
+		return err
+	}
+	resp, err := r.RecvMessage(DtxBroadcastChannelId)
+	if err != nil {
+		return err
+	}
+	if resp.Payload[0] != method {
+		return errors.New("invalid answer")
+	}
+	if len(resp.Auxiliary.GetArguments()) == 0 {
+		return errors.New("invalid answer")
+	}
+
+	r.supportedIdentifiers = resp.Auxiliary.GetArguments()[0].(map[string]interface{})
+	return nil
 }
 
-func (r *RemoteServer) sendMessage(channel int, selector string, args dtx.PrimitiveDictionary, expectsReply bool) error {
+func (r *RemoteServer) SendMessage(channel int, selector string, args dtx.PrimitiveDictionary, expectsReply bool) error {
 	// DTXMessageHeader
 	// DTXPayload
 	// 	DTXPayloadHeader
@@ -82,5 +102,71 @@ func (r *RemoteServer) sendMessage(channel int, selector string, args dtx.Primit
 	return r.Send(bytes)
 }
 
-func (r *RemoteServer) recvMessage(channel int) error {
+// makeChannel make a channel
+// refer: ios/dtx_codec/connection.go: RequestChannelIdentifier
+func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
+	if _, ok := r.supportedIdentifiers[identifier]; !ok {
+		log.Panicf("%v not in %+v", identifier, r.supportedIdentifiers)
+	}
+
+	if v, ok := r.channelCache[identifier]; ok {
+		return v, nil
+	}
+
+	r.lastChannelCode += 1
+	code := r.lastChannelCode
+	auxiliary := dtx.NewPrimitiveDictionary()
+	auxiliary.AddInt32(int(code))
+	arch, _ := nskeyedarchiver.ArchiveBin(identifier)
+	auxiliary.AddBytes(arch)
+	err := r.SendMessage(DtxBroadcastChannelId, "_requestChannelWithCode:identifier:", auxiliary, true)
+	if err != nil {
+		return Channel{}, err
+	}
+	// wait reply
+	_, err = r.RecvMessage(code)
+	if err != nil {
+		panic(err)
+	}
+
+	chanel := Channel{r, int(code)}
+	r.channelCache[identifier] = chanel
+	return chanel, nil
+}
+
+// func (r *RemoteServer) RecvPlist(channel ChannelCode) (, error) {
+// 	m, err := r.recvMessage()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return m.Payload, m.Auxiliary
+// }
+
+func (r *RemoteServer) RecvMessage(channel ChannelCode) (*dtx.Message, error) {
+	for {
+		array, _ := r.channelMessages[channel]
+		if len(array) > 0 {
+			m := array[0]
+			r.channelMessages[channel] = array[1:]
+			// not supported compression
+			compression := (m.PayloadHeader.Flags & 0xFF00) >> 12
+			if compression > 0 {
+				panic("compression is not implemented")
+			}
+			return m, nil
+		}
+		m, err := dtx.ReadMessage(r.Conn.Reader())
+		if err != nil {
+			return nil, err
+		}
+
+		if m.Identifier > r.curMessage {
+			log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", m.Identifier, r.curMessage)
+			panic("TODO")
+		}
+
+		array = append(array, &m)
+		r.channelMessages[ChannelCode(m.ChannelCode)] = array
+	}
 }

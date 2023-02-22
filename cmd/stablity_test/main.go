@@ -19,6 +19,8 @@ func init() {
 }
 
 func main() {
+	TestDeviceInfo()
+
 	flag.Parse()
 	if *udid == "" {
 		panic("need set udid by -u")
