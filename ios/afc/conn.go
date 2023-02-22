@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/danielpaulus/go-ios/ios"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/danielpaulus/go-ios/ios"
+	log "github.com/sirupsen/logrus"
 )
 
 const afcServiceName = "com.apple.afc"
@@ -29,7 +30,7 @@ func NewAfcConn(device ios.DeviceEntry) (*Connection, error) {
 	return &Connection{deviceConn: deviceConn}, nil
 }
 
-//NewFromConn allows to use AFC on a DeviceConnectionInterface, see crashreport for an example
+// NewFromConn allows to use AFC on a DeviceConnectionInterface, see crashreport for an example
 func NewFromConn(deviceConn ios.DeviceConnectionInterface) *Connection {
 	return &Connection{deviceConn: deviceConn}
 }
@@ -136,7 +137,7 @@ func (conn *Connection) Stat(path string) (*StatInfo, error) {
 }
 
 func (conn *Connection) ReadDir(path string) ([]string, error) {
-	log.Infof("ReadDir path:%v", path)
+	// log.Infof("ReadDir path:%v", path)
 	conn.mutex.Lock()
 	response, err := conn.request(Afc_operation_read_dir, []byte(path), nil)
 	if err != nil {
@@ -154,12 +155,12 @@ func (conn *Connection) ReadDir(path string) ([]string, error) {
 		}
 	}
 
-	log.Infof("ReadDir end:%v", fileList)
+	// log.Infof("ReadDir end:%v", fileList)
 	return fileList, nil
 }
 
 func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
-	log.Infof("OpenFile path:%v", path)
+	// log.Infof("OpenFile path:%v", path)
 	data := make([]byte, 8+len(path)+1)
 	binary.LittleEndian.PutUint64(data, mode)
 	copy(data[8:], path)
@@ -181,8 +182,8 @@ func (conn *Connection) OpenFile(path string, mode uint64) (uint64, error) {
 }
 
 func (conn *Connection) ReadFile(fd uint64, p []byte) (n int, err error) {
-	log.Infof("ReadFile inbuf pd:%v, read len:%v", fd, len(p))
-	defer log.Info("ReadFile end")
+	// log.Infof("ReadFile inbuf pd:%v, read len:%v", fd, len(p))
+	// defer log.Info("ReadFile end")
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint64(data, fd)
 	binary.LittleEndian.PutUint64(data[8:], uint64(len(p)))
@@ -195,7 +196,7 @@ func (conn *Connection) ReadFile(fd uint64, p []byte) (n int, err error) {
 	}
 	conn.mutex.Unlock()
 
-	log.Infof("inbuf len:%v, read len:%v", len(p), len(response.Payload))
+	// log.Infof("inbuf len:%v, read len:%v", len(p), len(response.Payload))
 	n = len(response.Payload)
 	if n > len(p) {
 		log.Fatalf("inbuf len:%v, read len:%v", len(p), len(response.Payload))
