@@ -9,6 +9,7 @@ package services
 
 import (
 	"errors"
+	"io"
 
 	"github.com/danielpaulus/go-ios/ios"
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
@@ -24,7 +25,7 @@ type RemoteServer struct {
 	lastChannelCode      ChannelCode
 	curMessage           int
 	channelCache         map[string]Channel
-	channelMessages      map[ChannelCode][]*dtx.Message
+	channelMessages      map[ChannelCode]*ChannelFragmenter
 }
 
 const (
@@ -41,7 +42,7 @@ func NewRemoteServer(device ios.DeviceEntry, name string) (*RemoteServer, error)
 		},
 		supportedIdentifiers: make(map[string]interface{}),
 		channelCache:         make(map[string]Channel),
-		channelMessages:      make(map[ChannelCode][]*dtx.Message),
+		channelMessages:      make(map[ChannelCode]*ChannelFragmenter),
 	}
 	err := s.init(device)
 	return s, err
@@ -50,7 +51,7 @@ func NewRemoteServer(device ios.DeviceEntry, name string) (*RemoteServer, error)
 func (b *RemoteServer) Init(device ios.DeviceEntry) error {
 	b.supportedIdentifiers = make(map[string]interface{})
 	b.channelCache = make(map[string]Channel)
-	b.channelMessages = make(map[ChannelCode][]*dtx.Message)
+	b.channelMessages = make(map[ChannelCode]*ChannelFragmenter)
 
 	if err := b.init(device); err != nil {
 		return err
@@ -111,7 +112,7 @@ func (r *RemoteServer) SendMessage(channel int, selector string, args dtx.Primit
 	if err != nil {
 		panic(err)
 	}
-	return r.Send(bytes)
+	return r.Conn.Send(bytes)
 }
 
 // makeChannel make a channel
@@ -135,8 +136,8 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 	if err != nil {
 		return Channel{}, err
 	}
-	// wait reply
-	_, err = r.RecvMessage(code)
+	// wait ACK
+	_, err = r.RecvMessage(DtxBroadcastChannelId)
 	if err != nil {
 		panic(err)
 	}
@@ -146,42 +147,49 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 	return chanel, nil
 }
 
-// func (r *RemoteServer) RecvPlist(channel ChannelCode) (, error) {
-// 	m, err := r.recvMessage()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return m.Payload, m.Auxiliary
-// }
-
-func (r *RemoteServer) RecvMessage(channel ChannelCode) (*dtx.Message, error) {
+func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, error) {
+	mheader := &DTXMessageHeader{}
+	buf := make([]byte, 32)
 	for {
-		array := r.channelMessages[channel]
-		if len(array) > 0 {
-			m := array[0]
-			r.channelMessages[channel] = array[1:]
+		fragmenter, ok := r.channelMessages[channel]
+		if ok && fragmenter.IsFull() {
 			// not supported compression
-			compression := (m.PayloadHeader.Flags & 0xFF00) >> 12
-			if compression > 0 {
-				panic("compression is not implemented")
-			}
-			// log.Infof("<-- %#v", m)
-			return m, nil
+			return fragmenter, nil
 		}
-		m, err := dtx.ReadMessage(r.Conn.Reader())
+
+		_, err := io.ReadFull(r.Conn.Reader(), buf)
+		if err != nil {
+			return nil, err
+		}
+		mheader.ReadFrom(buf)
+
+		if mheader.ConversationIndex == 0 {
+			if int(mheader.Identifier) > r.curMessage {
+				log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", mheader.Identifier, r.curMessage)
+				r.curMessage = int(mheader.Identifier)
+			}
+		}
+
+		fragmenter, ok = r.channelMessages[ChannelCode(mheader.ChannelCode)]
+		if !ok {
+			fragmenter = &ChannelFragmenter{}
+			r.channelMessages[ChannelCode(mheader.ChannelCode)] = fragmenter
+		}
+
+		if mheader.FragmentCount > 1 && mheader.FragmentId == 0 {
+			// when reading multiple message fragments, the first fragment contains only a message header
+			fragmenter.AddFirst(mheader)
+			continue
+		}
+
+		chunk := make([]byte, mheader.PayloadLength)
+		_, err = io.ReadFull(r.Conn.Reader(), chunk)
 		if err != nil {
 			return nil, err
 		}
 
-		if m.ConversationIndex == 0 {
-			if m.Identifier > r.curMessage {
-				log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", m.Identifier, r.curMessage)
-				r.curMessage = m.Identifier
-			}
-		}
-
-		array = append(array, &m)
-		r.channelMessages[ChannelCode(m.ChannelCode)] = array
+		fragmenter.Add(mheader, chunk)
+		log.Infof("<-channel:%d reply:%v, fragment:%v:%v, %v", mheader.ChannelCode, mheader.ExpectsReply,
+			mheader.FragmentId, mheader.FragmentCount)
 	}
 }

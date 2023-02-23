@@ -29,6 +29,9 @@ func GetDevice(udid string) (ios.DeviceEntry, error) {
 	return ios.DeviceEntry{}, errors.New("not found")
 }
 
+func LogMessage(msg *dtx.Message) {
+}
+
 func ToMap(msg *dtx.Message) (string, map[string]interface{}, error) {
 	if len(msg.Payload) != 1 {
 		return "", map[string]interface{}{}, fmt.Errorf("error extracting, msg %+v has payload size !=1", msg)
