@@ -31,6 +31,7 @@ func (d *DeviceInfo) Proclist() {
 	log.Infoln("deviceinfo: runningProcesses")
 	f, err := d.channel.Call("runningProcesses")
 	if err != nil {
+		// 偶现这里返回EOF
 		panic(err)
 	}
 
