@@ -151,6 +151,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 	mheader := &DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
 	for {
+		// TODO: 这里的实现与pymobiledevice3不一样，没有使用队列，是否可能有问题？
 		fragmenter, ok := r.channelMessages[channel]
 		if ok && fragmenter.IsFull() {
 			// not supported compression

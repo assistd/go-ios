@@ -97,6 +97,10 @@ func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
 }
 
 func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
+	if c.finished {
+		log.Panicf("add to fulled frag:%#v", header)
+	}
+
 	c.buf.Write(chunk)
 	if header.FragmentId == header.FragmentCount-1 {
 		// last fragment
