@@ -77,13 +77,15 @@ func (d *DTXAuxiliaryHeader) ReadFrom(b []byte) {
 	d.Unknown2 = binary.LittleEndian.Uint32(b[12:])
 }
 
-type ChannelFragmenter struct {
+type fHeader struct {
 	FragmentCount     uint16
 	Identifier        uint32
 	ConversationIndex uint32
 	ChannelCode       uint32
 	ExpectsReply      uint32
-
+}
+type ChannelFragmenter struct {
+	fHeader
 	buf      bytes.Buffer
 	finished bool
 }
@@ -98,7 +100,7 @@ func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
 
 func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
 	if c.finished {
-		log.Panicf("add to fulled frag:%#v", header)
+		log.Panicf("add to fulled fheader:%#v header:%#v", c.fHeader, header)
 	}
 
 	c.buf.Write(chunk)

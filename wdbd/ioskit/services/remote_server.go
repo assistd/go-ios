@@ -155,6 +155,8 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 		fragmenter, ok := r.channelMessages[channel]
 		if ok && fragmenter.IsFull() {
 			// not supported compression
+			log.Infof("<-channel:%v fulled", channel)
+			delete(r.channelMessages, channel)
 			return fragmenter, nil
 		}
 
@@ -197,8 +199,8 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 			return nil, err
 		}
 
-		fragmenter.Add(mheader, chunk)
 		log.Infof("<-channel:%d reply:%v, fragment:%v:%v", mheader.ChannelCode, mheader.ExpectsReply,
 			mheader.FragmentId, mheader.FragmentCount)
+		fragmenter.Add(mheader, chunk)
 	}
 }

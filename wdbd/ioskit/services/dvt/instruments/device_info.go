@@ -47,6 +47,5 @@ func (d *DeviceInfo) Proclist() {
 
 	for i, procMap := range procList {
 		fmt.Printf("[%v] %#v\n", i, procMap)
-
 	}
 }
