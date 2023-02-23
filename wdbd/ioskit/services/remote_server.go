@@ -13,6 +13,7 @@ import (
 	"github.com/danielpaulus/go-ios/ios"
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
+	"github.com/danielpaulus/go-ios/wdbd/ioskit/tunnel"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -78,14 +79,11 @@ func (r *RemoteServer) PerformHandshake() error {
 	if err != nil {
 		return err
 	}
-	if resp.Payload[0] != method {
+	_, aux, err := tunnel.ToMap(resp)
+	if err != nil {
 		return errors.New("invalid answer")
 	}
-	if len(resp.Auxiliary.GetArguments()) == 0 {
-		return errors.New("invalid answer")
-	}
-
-	r.supportedIdentifiers = resp.Auxiliary.GetArguments()[0].(map[string]interface{})
+	r.supportedIdentifiers = aux
 	return nil
 }
 
@@ -159,7 +157,7 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 
 func (r *RemoteServer) RecvMessage(channel ChannelCode) (*dtx.Message, error) {
 	for {
-		array, _ := r.channelMessages[channel]
+		array := r.channelMessages[channel]
 		if len(array) > 0 {
 			m := array[0]
 			r.channelMessages[channel] = array[1:]
@@ -168,6 +166,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*dtx.Message, error) {
 			if compression > 0 {
 				panic("compression is not implemented")
 			}
+			// log.Infof("<-- %#v", m)
 			return m, nil
 		}
 		m, err := dtx.ReadMessage(r.Conn.Reader())
