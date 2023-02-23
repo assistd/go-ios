@@ -79,7 +79,7 @@ func (r *RemoteServer) PerformHandshake() error {
 	if err != nil {
 		return err
 	}
-	_, aux, err := resp.Parse2()
+	_, aux, err := resp.Parse()
 	if err != nil {
 		return errors.New("invalid answer")
 	}

@@ -34,8 +34,8 @@ func (d *DeviceInfo) Proclist() {
 		panic(err)
 	}
 
-	data, _, err := f.Parse2()
-	// log.Infof("proclist: sel=%v, aux=%#v, err=%v", data, aux, err)
+	data, _, err := f.Parse()
+	// log.Infof("proclist: sel=%v, aux=%#v, exWrr=%v", data, aux, err)
 	if err != nil {
 		panic(err)
 	}

@@ -56,12 +56,6 @@ func (d *DTXPayloadHeader) Length() int {
 	return 16
 }
 
-type DTXMessage struct {
-	DTXMessageHeader
-	DTXPayloadHeader
-	Payload []byte
-}
-
 // The AuxiliaryHeader can actually be completely ignored. We do not need to care about the buffer size
 // And we already know the AuxiliarySize. The other two ints seem to be always 0 anyway. Could
 // also be that Buffer and Aux Size are Uint64
@@ -122,24 +116,7 @@ func (c *ChannelFragmenter) Get() ([]byte, error) {
 	return c.buf.Bytes(), nil
 }
 
-func (c *ChannelFragmenter) Parse() (pheader DTXPayloadHeader, payload []interface{}, auxiliary dtx.PrimitiveDictionary, err error) {
-	b := c.buf.Bytes()
-	pheader.ReadFrom(b)
-
-	pblen := pheader.Length()
-	if pheader.AuxiliaryLength > 0 {
-		auxiliary = dtx.DecodeAuxiliary(b[pblen:])
-	}
-
-	if pheader.TotalPayloadLength-uint64(pheader.AuxiliaryLength) > 0 {
-		pb := b[pblen+int(pheader.AuxiliaryLength):]
-		payload, err = nskeyedarchiver.Unarchive(pb)
-	}
-
-	return
-}
-
-func (c *ChannelFragmenter) Parse2() (payload []interface{}, aux map[string]interface{}, err error) {
+func (c *ChannelFragmenter) Parse() (payload []interface{}, aux map[string]interface{}, err error) {
 	b := c.buf.Bytes()
 	pheader := DTXPayloadHeader{}
 	pheader.ReadFrom(b)
