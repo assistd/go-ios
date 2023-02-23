@@ -14,7 +14,6 @@ import (
 	"github.com/danielpaulus/go-ios/ios"
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
-	"github.com/danielpaulus/go-ios/wdbd/ioskit/tunnel"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -80,10 +79,11 @@ func (r *RemoteServer) PerformHandshake() error {
 	if err != nil {
 		return err
 	}
-	_, aux, err := tunnel.ToMap(resp)
+	_, aux, err := resp.Parse2()
 	if err != nil {
 		return errors.New("invalid answer")
 	}
+
 	r.supportedIdentifiers = aux
 	return nil
 }
@@ -149,13 +149,21 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 
 func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, error) {
 	mheader := &DTXMessageHeader{}
-	buf := make([]byte, 32)
+	buf := make([]byte, mheader.Length())
 	for {
 		fragmenter, ok := r.channelMessages[channel]
 		if ok && fragmenter.IsFull() {
 			// not supported compression
 			return fragmenter, nil
 		}
+
+		/*
+			m, _ := dtx.ReadMessage(r.Conn.Reader())
+			log.Infof("<--%v", m.StringDebug())
+			log.Infof("<--pb header: %#v", m.PayloadHeader)
+			log.Infof("<--aux header: %#v", m.AuxiliaryHeader)
+			os.Exit(1)
+		*/
 
 		_, err := io.ReadFull(r.Conn.Reader(), buf)
 		if err != nil {
@@ -189,7 +197,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 		}
 
 		fragmenter.Add(mheader, chunk)
-		log.Infof("<-channel:%d reply:%v, fragment:%v:%v, %v", mheader.ChannelCode, mheader.ExpectsReply,
+		log.Infof("<-channel:%d reply:%v, fragment:%v:%v", mheader.ChannelCode, mheader.ExpectsReply,
 			mheader.FragmentId, mheader.FragmentCount)
 	}
 }

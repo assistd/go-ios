@@ -7,7 +7,7 @@ type Channel struct {
 	value int
 }
 
-func (c Channel) Call(selector string) (*dtx.Message, error) {
+func (c Channel) Call(selector string) (*ChannelFragmenter, error) {
 	auxiliary := dtx.NewPrimitiveDictionary()
 	err := c.r.SendMessage(c.value, selector, auxiliary, true)
 	if err != nil {

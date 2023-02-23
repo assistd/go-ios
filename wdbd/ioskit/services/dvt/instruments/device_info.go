@@ -1,6 +1,8 @@
 package instruments
 
 import (
+	"fmt"
+
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt"
 	log "github.com/sirupsen/logrus"
@@ -27,10 +29,24 @@ func NewDeviceInfo(dvt *dvt.DvtSecureSocketProxyService) (*DeviceInfo, error) {
 // List a directory.
 func (d *DeviceInfo) Proclist() {
 	log.Infoln("deviceinfo: runningProcesses")
-	m, err := d.channel.Call("runningProcesses")
+	f, err := d.channel.Call("runningProcesses")
 	if err != nil {
 		panic(err)
 	}
 
-	log.Infof("proclist: %+v", m.Payload)
+	data, _, err := f.Parse2()
+	// log.Infof("proclist: sel=%v, aux=%#v, err=%v", data, aux, err)
+	if err != nil {
+		panic(err)
+	}
+
+	procList, ok := data[0].([]interface{})
+	if !ok {
+		panic(err)
+	}
+
+	for i, procMap := range procList {
+		fmt.Printf("[%v] %#v\n", i, procMap)
+
+	}
 }
