@@ -7,8 +7,11 @@ type Channel struct {
 	value int
 }
 
-func (c Channel) Call(selector string) (*ChannelFragmenter, error) {
+func (c Channel) Call(selector string, args ...interface{}) (*ChannelFragmenter, error) {
 	auxiliary := dtx.NewPrimitiveDictionary()
+	for _, arg := range args {
+		auxiliary.AddNsKeyedArchivedObject(arg)
+	}
 	err := c.r.SendMessage(c.value, selector, auxiliary, true)
 	if err != nil {
 		return nil, err
