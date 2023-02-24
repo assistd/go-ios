@@ -34,5 +34,5 @@ func NewTestManagerdSecureService(device ios.DeviceEntry) (*TestManagerdSecureSe
 }
 
 func (r *TestManagerdSecureService) GetXcodeIDEChannel() services.Channel {
-	return services.BuildChannel(&r.RemoteServer, -1)
+	return services.BuildChannel(&r.RemoteServer, 0xFFFFFFFF) //-1
 }

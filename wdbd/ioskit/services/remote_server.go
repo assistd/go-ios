@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type ChannelCode int
+type ChannelCode uint32
 type RemoteServer struct {
 	BaseService
 	supportedIdentifiers map[string]interface{}
@@ -88,7 +88,7 @@ func (r *RemoteServer) PerformHandshake() error {
 	return nil
 }
 
-func (r *RemoteServer) SendMessage(channel int, selector string, args dtx.PrimitiveDictionary, expectsReply bool) error {
+func (r *RemoteServer) SendMessage(channel uint32, selector string, args dtx.PrimitiveDictionary, expectsReply bool) error {
 	// DTXMessageHeader
 	// DTXPayload
 	// 	DTXPayloadHeader
@@ -104,7 +104,7 @@ func (r *RemoteServer) SendMessage(channel int, selector string, args dtx.Primit
 	bytes, err := dtx.Encode(
 		r.curMessage, // Identifier
 		0,            // ConversationIndex
-		channel,      // ChannelCode
+		int(channel), // ChannelCode
 		expectsReply, // ExpectsReply
 		flags,        // MessageType
 		sel,          // payloadBytes
@@ -118,9 +118,11 @@ func (r *RemoteServer) SendMessage(channel int, selector string, args dtx.Primit
 // makeChannel make a channel
 // refer: ios/dtx_codec/connection.go: RequestChannelIdentifier
 func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
-	if _, ok := r.supportedIdentifiers[identifier]; !ok {
-		log.Panicf("%v not in %+v", identifier, r.supportedIdentifiers)
-	}
+	/*
+		if _, ok := r.supportedIdentifiers[identifier]; !ok {
+			log.Panicf("%v not in %+v", identifier, r.supportedIdentifiers)
+		}
+	*/
 
 	if v, ok := r.channelCache[identifier]; ok {
 		return v, nil
@@ -142,7 +144,7 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 		panic(err)
 	}
 
-	chanel := Channel{r, int(code)}
+	chanel := Channel{r, uint32(code)}
 	r.channelCache[identifier] = chanel
 	return chanel, nil
 }
@@ -199,8 +201,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 			return nil, err
 		}
 
-		log.Infof("<-channel:%d reply:%v, fragment:%v:%v", mheader.ChannelCode, mheader.ExpectsReply,
-			mheader.FragmentId, mheader.FragmentCount)
+		log.Infof("<- fragment: %#v, chunk:%v", mheader, len(chunk))
 		fragmenter.Add(mheader, chunk)
 	}
 }

@@ -117,7 +117,7 @@ func (t *XctestRunner) Xctest(
 		return err
 	}
 
-	err = t.initiateControlSessionWithCapabilities()
+	_, err = t.initiateControlSessionWithCapabilities()
 	if err != nil {
 		return err
 	}
@@ -167,6 +167,7 @@ func (t *XctestRunner) Xctest(
 	if err != nil {
 		return err
 	}
+	//TODO: defer process.Close()
 
 	ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
 	if err != nil {
@@ -182,15 +183,28 @@ func (t *XctestRunner) Xctest(
 	return t.idechannel.RecvLoop()
 }
 
-func (t *XctestRunner) initiateControlSessionWithCapabilities() error {
+func (t *XctestRunner) initiateControlSessionWithCapabilities() (caps nskeyedarchiver.XCTCapabilities, err error) {
 	const method = "_IDE_initiateControlSessionWithCapabilities:"
 	args := nskeyedarchiver.XCTCapabilities{}
-	reply, err := t.channel.Call(method, args)
+	f, err2 := t.channel.Call(method, args)
 	if err != nil {
-		return err
+		err = err2
+		return
 	}
-	log.Infoln("capabilities:", reply)
-	return nil
+	data, _, err2 := f.Parse()
+	// log.Infof("proclist: sel=%v, aux=%#v, exWrr=%v", data, aux, err)
+	if err2 != nil {
+		err = err2
+		return
+	}
+	log.Infoln("capabilities:", data)
+	val, ok := data[0].(nskeyedarchiver.XCTCapabilities)
+	if !ok {
+		err = fmt.Errorf("%v invalid return type", method)
+		return
+	}
+	caps = val
+	return
 }
 
 func (t *XctestRunner) initiateSessionWithIdentifierAndCaps(uuid uuid.UUID, in nskeyedarchiver.XCTCapabilities) (caps nskeyedarchiver.XCTCapabilities, err error) {

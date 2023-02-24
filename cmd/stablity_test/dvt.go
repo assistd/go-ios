@@ -25,7 +25,7 @@ func TestLaunch(dvt *dvt.DvtSecureSocketProxyService) {
 		log.Fatal(err)
 	}
 
-	pid, err := deviceInfo.Launch("com.example.multiTouch", nil, nil, false, false)
+	pid, err := deviceInfo.Launch("com.prife.demo1", nil, nil, false, false)
 	log.Infoln(pid, err)
 }
 
@@ -45,12 +45,18 @@ func TestDvt() {
 		log.Fatal(err)
 	}
 
-	dvt, err := dvt.NewDvtSecureSocketProxyService(device)
+	sps, err := dvt.NewDvtSecureSocketProxyService(device)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dvt.Close()
+	defer sps.Close()
 
-	TestLaunch(dvt)
+	tms, err := dvt.NewTestManagerdSecureService(device)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tms.Close()
+
+	TestXctest(tms, sps)
 	os.Exit(0)
 }

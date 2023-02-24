@@ -7,10 +7,10 @@ import (
 
 type Channel struct {
 	r     *RemoteServer
-	value int
+	value uint32
 }
 
-func BuildChannel(r *RemoteServer, channel int) Channel {
+func BuildChannel(r *RemoteServer, channel uint32) Channel {
 	return Channel{r, channel}
 }
 
@@ -32,7 +32,7 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 	for _, arg := range args {
 		auxiliary.AddNsKeyedArchivedObject(arg)
 	}
-	err := c.r.SendMessage(c.value, selector, auxiliary, true)
+	err := c.r.SendMessage(c.value, selector, auxiliary, false)
 	if err != nil {
 		return err
 	}
@@ -41,6 +41,7 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 
 func (c Channel) RecvLoop() error {
 	for {
+		log.Infof("RecvLoop: %v", c.value)
 		reply, err := c.r.RecvMessage(ChannelCode(c.value))
 		if err != nil {
 			log.Errorln(err)
@@ -53,9 +54,8 @@ func (c Channel) RecvLoop() error {
 			continue
 		}
 
+		log.Infoln("recevied:", data, aux)
 		method := data[0].(string)
-		log.Infoln("recevied:", method, aux)
-
 		switch method {
 		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
 		case "_XCT_logDebugMessage:":
