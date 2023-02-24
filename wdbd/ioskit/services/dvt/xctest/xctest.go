@@ -1,11 +1,13 @@
 package xctest
 
 import (
+	"errors"
 	"fmt"
 	"path"
 
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/afc"
+	"github.com/danielpaulus/go-ios/ios/installationproxy"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt"
@@ -38,12 +40,35 @@ type XctestAppInfo struct {
 }
 
 func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
-	x.testSessionID = uuid.New()
+	insproxy, err := installationproxy.New(device)
+	if err != nil {
+		return err
+	}
+	defer insproxy.Close()
+	apps, err := insproxy.BrowseUserApps()
+	found := false
+	for _, app := range apps {
+		if app.CFBundleIdentifier == x.TestRunnerBundleID {
+			x.targetAppPath = app.Path
+			x.targetAppBundleName = app.CFBundleName
+			x.targetAppBundleID = app.CFBundleIdentifier
+			x.testrunnerAppPath = app.Path
+			x.testRunnerHomePath = app.EnvironmentVariables["HOME"].(string)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.New("xctest app not existed!")
+	}
+
 	fsync, err := afc.NewHouseArrestContainerFs(device, x.TestRunnerBundleID)
 	if err != nil {
 		return err
 	}
 	defer fsync.Close()
+
+	x.testSessionID = uuid.New()
 	configFilePath := path.Join("tmp", x.testSessionID.String()+".xctestconfiguration")
 	x.absConfigPath = path.Join(x.testRunnerHomePath, configFilePath)
 	testBundleURL := path.Join(x.testrunnerAppPath, "PlugIns", x.XctestConfigFileName)
@@ -68,11 +93,11 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocke
 		return nil, err
 	}
 
-	ideChannel := tms.GetXcodeIDEChannel()
-	log.Infoln("xctest-runner: ", ideChannel)
+	idechannel := tms.GetXcodeIDEChannel()
+	log.Infoln("xctest-runner: ", idechannel)
 	s := &XctestRunner{
 		channel:    channel,
-		idechannel: ideChannel,
+		idechannel: idechannel,
 		sps:        sps,
 		device:     tms.GetDevice(),
 	}
@@ -81,7 +106,11 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocke
 
 func (t *XctestRunner) Xctest(
 	bundleId string, env map[string]interface{}, args []interface{}, killExisting bool) error {
-	info := XctestAppInfo{}
+	info := XctestAppInfo{
+		BundleID:             "com.wetest.wda-scrcpy.xctrunner",
+		TestRunnerBundleID:   "com.wetest.wda-scrcpy.xctrunner",
+		XctestConfigFileName: "scrcpy.xctest",
+	}
 
 	err := info.Setup(t.device)
 	if err != nil {
@@ -98,12 +127,16 @@ func (t *XctestRunner) Xctest(
 		"skipped test capability": uint64(1),
 		"test timeout capability": uint64(1),
 	}}
-	t.initiateSessionWithIdentifierAndCaps(info.se, localCaps)
+	_, err = t.initiateSessionWithIdentifierAndCaps(info.testSessionID, localCaps)
+	if err != nil {
+		return err
+	}
 
 	p, err := instruments.NewProcessControl(t.sps)
 	if err != nil {
 		return err
 	}
+
 	// build args
 	_args := []interface{}{
 		"-NSTreatUnknownArgumentsAsOpen", "NO", "-ApplePersistenceIgnoreState", "YES",
@@ -122,9 +155,9 @@ func (t *XctestRunner) Xctest(
 		"NSUnbufferedIO":                  "YES",
 		"OS_ACTIVITY_DT_MODE":             "YES",
 		"SQLITE_ENABLE_THREAD_ASSERTIONS": "1",
-		"XCTestBundlePath":                testBundlePath,
-		"XCTestConfigurationFilePath":     xctestConfigPath,
-		"XCTestSessionIdentifier":         sessionIdentifier,
+		"XCTestBundlePath":                info.testrunnerAppPath + "/PlugIns/" + info.XctestConfigFileName,
+		"XCTestConfigurationFilePath":     info.absConfigPath, // info.testRunnerHomePath + /tmp + <session>.xctestconfiguration
+		"XCTestSessionIdentifier":         info.testSessionID.String(),
 	}
 	for k, v := range env {
 		_env[k] = v
@@ -135,6 +168,18 @@ func (t *XctestRunner) Xctest(
 		return err
 	}
 
+	ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
+	if err != nil {
+		return err
+	}
+	log.Infof("authorizing test session for pid %d successful %t", process.Pid, ok)
+
+	err = t.startExecutingTestPlanWithProtocolVersion(36)
+	if err != nil {
+		return err
+	}
+
+	return t.idechannel.RecvLoop()
 }
 
 func (t *XctestRunner) initiateControlSessionWithCapabilities() error {
@@ -188,7 +233,7 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 
 func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64) error {
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
-	err := t.channel.CallAsync(method, version)
+	err := t.idechannel.CallAsync(method, version)
 	if err != nil {
 		log.Errorf("%v: failed:%v", method, err)
 		return err

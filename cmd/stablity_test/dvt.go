@@ -6,6 +6,7 @@ import (
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt/instruments"
+	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt/xctest"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,6 +27,16 @@ func TestLaunch(dvt *dvt.DvtSecureSocketProxyService) {
 
 	pid, err := deviceInfo.Launch("com.example.multiTouch", nil, nil, false, false)
 	log.Infoln(pid, err)
+}
+
+func TestXctest(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) {
+	runner, err := xctest.NewXctestRunner(tms, sps)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = runner.Xctest("com.wetest.wda-scrcpy.xctrunner", nil, nil, false)
+	log.Errorln(err)
 }
 
 func TestDvt() {

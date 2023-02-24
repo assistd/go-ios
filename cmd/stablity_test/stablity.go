@@ -30,7 +30,7 @@ func stablityTest(udid string) error {
 	if err != nil {
 		return fmt.Errorf("exec [install && launch] command failed:%v", err)
 	}
-	err = xctest(udid)
+	err = runXctest(udid)
 	if err != nil {
 		return fmt.Errorf("exec [xctest] command failed:%v", err)
 	}
@@ -125,7 +125,7 @@ func installApp(udid string) error {
 	return nil
 }
 
-func xctest(udid string) error {
+func runXctest(udid string) error {
 	c := make(chan error, 1)
 	//ctx, cancel := context.WithCancel(context.Background())
 	go func() {
