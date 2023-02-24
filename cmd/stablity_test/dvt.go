@@ -9,7 +9,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestDeviceInfo() {
+func TestDeviceInfo(dvt *dvt.DvtSecureSocketProxyService) {
+	deviceInfo, err := instruments.NewDeviceInfo(dvt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	deviceInfo.Proclist()
+}
+
+func TestLaunch(dvt *dvt.DvtSecureSocketProxyService) {
+	deviceInfo, err := instruments.NewProcessControl(dvt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pid, err := deviceInfo.Launch("com.example.multiTouch", nil, nil, false, false)
+	log.Infoln(pid, err)
+}
+
+func TestDvt() {
 	device, err := ios.GetDevice("")
 	if err != nil {
 		log.Fatal(err)
@@ -21,11 +40,6 @@ func TestDeviceInfo() {
 	}
 	defer dvt.Close()
 
-	deviceInfo, err := instruments.NewDeviceInfo(dvt)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	deviceInfo.Proclist()
+	TestLaunch(dvt)
 	os.Exit(0)
 }

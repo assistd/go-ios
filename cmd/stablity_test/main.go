@@ -27,7 +27,7 @@ func init() {
 }
 
 func main() {
-	TestDeviceInfo()
+	TestDvt()
 
 	flag.Parse()
 	if *udid == "" {
