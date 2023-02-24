@@ -35,6 +35,15 @@ func (b *BaseService) init(device ios.DeviceEntry) error {
 	return nil
 }
 
+func (b *BaseService) GetDevice() ios.DeviceEntry {
+	return ios.DeviceEntry{
+		DeviceID: b.deviceID,
+		Properties: ios.DeviceProperties{
+			SerialNumber: b.udid,
+		},
+	}
+}
+
 func (b *BaseService) Send(data interface{}) error {
 	bytes, err := b.codec.Encode(data)
 	if err != nil {
