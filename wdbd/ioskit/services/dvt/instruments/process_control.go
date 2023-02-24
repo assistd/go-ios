@@ -56,12 +56,13 @@ func (d *ProcessControl) Launch(bundleId string, env map[string]interface{}, arg
 		panic(err)
 	}
 
-	data, _, err := f.Parse()
+	data, aux, err := f.Parse()
 	// log.Infof("proclist: sel=%v, aux=%#v, exWrr=%v", data, aux, err)
 	if err != nil {
 		panic(err)
 	}
 
+	log.Infof("data:%#v, aux:%#v, err:%v", data, aux, err)
 	pid, ok := data[0].(uint64)
 	if !ok {
 		panic("invalid reply")
