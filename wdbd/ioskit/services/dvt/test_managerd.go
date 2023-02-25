@@ -33,6 +33,10 @@ func NewTestManagerdSecureService(device ios.DeviceEntry) (*TestManagerdSecureSe
 	return s, err
 }
 
+func (r *TestManagerdSecureService) IsSecure() bool {
+	return r.Name == "com.apple.testmanagerd.lockdown.secure"
+}
+
 func (r *TestManagerdSecureService) GetXcodeIDEChannel() services.Channel {
 	return services.BuildChannel(&r.RemoteServer, 0xFFFFFFFF) //-1
 }

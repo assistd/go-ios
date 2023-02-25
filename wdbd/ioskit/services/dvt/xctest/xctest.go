@@ -22,7 +22,8 @@ type XctestRunner struct {
 	channel  services.Channel
 	channel2 services.Channel
 	sps      *dvt.DvtSecureSocketProxyService
-	tms      *dvt.TestManagerdSecureService
+	tms1     *dvt.TestManagerdSecureService
+	tms2     *dvt.TestManagerdSecureService
 	device   ios.DeviceEntry
 }
 
@@ -112,31 +113,45 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdS
 		channel:  channel,
 		channel2: channel2,
 		sps:      sps,
-		tms:      tms2,
+		tms1:     tms,
+		tms2:     tms2,
 		device:   tms.GetDevice(),
 	}
 	return s, nil
 }
 
 func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, args []interface{}, killExisting bool) error {
+	iOS14 := t.tms2.IsSecure()
+	var protover uint64
+	if iOS14 {
+		protover = 36
+	} else {
+		protover = 25
+	}
+
 	err := info.Setup(t.device)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.initiateControlSessionWithCapabilities()
-	if err != nil {
-		return err
-	}
+	if iOS14 {
+		_, err = t.initiateControlSessionWithCapabilities()
+		if err != nil {
+			return err
+		}
 
-	localCaps := nskeyedarchiver.XCTCapabilities{CapabilitiesDictionary: map[string]interface{}{
-		"XCTIssue capability":     uint64(1),
-		"skipped test capability": uint64(1),
-		"test timeout capability": uint64(1),
-	}}
-	_, err = t.initiateSessionWithIdentifierAndCaps(info.testSessionID, localCaps)
-	if err != nil {
-		return err
+		localCaps := nskeyedarchiver.XCTCapabilities{CapabilitiesDictionary: map[string]interface{}{
+			"XCTIssue capability":     uint64(1),
+			"skipped test capability": uint64(1),
+			"test timeout capability": uint64(1),
+		}}
+		_, err = t.initiateSessionWithIdentifierAndCaps(info.testSessionID, localCaps)
+		if err != nil {
+			return err
+		}
+	} else {
+		// iOS version < 14.0
+		t.initiateSessionWithIdentifier(info.testSessionID, protover)
 	}
 
 	p, err := instruments.NewProcessControl(t.sps)
@@ -144,53 +159,73 @@ func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, ar
 		return err
 	}
 
-	// build args
-	_args := []interface{}{
-		"-NSTreatUnknownArgumentsAsOpen", "NO", "-ApplePersistenceIgnoreState", "YES",
-	}
-	for _, arg := range args {
-		_args = append(_args, arg)
-	}
-
-	// build env
-	_env := map[string]interface{}{
-		"CA_ASSERT_MAIN_THREAD_TRANSACTIONS": "0",
-		"CA_DEBUG_TRANSACTIONS":              "0",
-		"DYLD_INSERT_LIBRARIES":              "/Developer/usr/lib/libMainThreadChecker.dylib",
-
-		"MTC_CRASH_ON_REPORT":             "1",
-		"NSUnbufferedIO":                  "YES",
-		"OS_ACTIVITY_DT_MODE":             "YES",
-		"SQLITE_ENABLE_THREAD_ASSERTIONS": "1",
-		"XCTestBundlePath":                info.testrunnerAppPath + "/PlugIns/" + info.XctestConfigFileName,
-		"XCTestConfigurationFilePath":     info.absConfigPath, // info.testRunnerHomePath + /tmp + <session>.xctestconfiguration
-		"XCTestSessionIdentifier":         info.testSessionID.String(),
-	}
-
 	log.Infoln("XCTestBundlePath", info.testrunnerAppPath+"/PlugIns/"+info.XctestConfigFileName)
 	log.Infoln("XCTestConfigurationFilePath", info.absConfigPath)
 	log.Infoln("XCTestSessionIdentifier", info.testSessionID.String())
 
+	// init args and enviroment vars
+	_args := []interface{}{}
+	_env := map[string]interface{}{
+		"DYLD_INSERT_LIBRARIES":       "/Developer/usr/lib/libMainThreadChecker.dylib",
+		"XCTestBundlePath":            info.testrunnerAppPath + "/PlugIns/" + info.XctestConfigFileName,
+		"XCTestConfigurationFilePath": info.absConfigPath, // info.testRunnerHomePath + /tmp + <session>.xctestconfiguration
+		"XCTestSessionIdentifier":     info.testSessionID.String(),
+	}
+
+	if iOS14 {
+		ios14args := []interface{}{
+			"-NSTreatUnknownArgumentsAsOpen", "NO", "-ApplePersistenceIgnoreState", "YES",
+		}
+		for _, arg := range ios14args {
+			_args = append(_args, arg)
+		}
+
+		ios14env := map[string]interface{}{
+			"CA_ASSERT_MAIN_THREAD_TRANSACTIONS": "0",
+			"CA_DEBUG_TRANSACTIONS":              "0",
+			"MTC_CRASH_ON_REPORT":                "1",
+			"NSUnbufferedIO":                     "YES",
+			"OS_ACTIVITY_DT_MODE":                "YES",
+			"SQLITE_ENABLE_THREAD_ASSERTIONS":    "1",
+		}
+
+		for k, v := range ios14env {
+			_env[k] = v
+		}
+	}
+
+	// merge user's args and envs
+	for _, arg := range args {
+		_args = append(_args, arg)
+	}
 	for k, v := range env {
 		_env[k] = v
 	}
 
+	// launch xctest process
 	process, err := p.Launch(info.BundleID, _env, _args, killExisting, false)
 	if err != nil {
 		return err
 	}
 	//TODO: defer process.Close()
 
-	// FIXME: 实验证明，这里的延迟是必须的，否则xctest app能拉起，显示黑屏，但不执行test
-	//
-	time.Sleep(time.Second)
-
-	ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
-	if err != nil {
-		return err
+	if iOS14 {
+		// FIXME: 实验证明，这里的延迟是必须的，否则xctest app能拉起，显示黑屏，但不执行test
+		time.Sleep(time.Second)
+		ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
+		if err != nil {
+			return err
+		}
+		log.Infof("authorizing test session for pid %d successful %t", process.Pid, ok)
+	} else {
+		// iOS version < 14.0
+		ret, err := t.initiateControlSession(process.Pid, protover)
+		if err != nil {
+			return err
+		}
+		log.Warnln("initiateControlSession:", ret)
 	}
-	log.Infof("authorizing test session for pid %d successful %t", process.Pid, ok)
-	return t.startExecutingTestPlanWithProtocolVersion(36, info.config)
+	return t.startExecutingTestPlanWithProtocolVersion(protover, info.config)
 }
 
 func (t *XctestRunner) initiateControlSessionWithCapabilities() (caps nskeyedarchiver.XCTCapabilities, err error) {
@@ -256,15 +291,24 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 }
 
 func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64, testConfig nskeyedarchiver.XCTestConfiguration) error {
+	var t1, t2 *dvt.TestManagerdSecureService
+	iOS14 := t.tms2.IsSecure()
+	if iOS14 {
+		t1 = t.tms2
+		t2 = t.tms2
+	} else {
+		t1 = t.tms1
+		t2 = t.tms2
+	}
+
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
-	err := t.tms.GetXcodeIDEChannel().CallAsync(method, version)
+	err := t2.GetXcodeIDEChannel().CallAsync(method, version)
 	if err != nil {
 		log.Errorf("%v: failed:%v", method, err)
 		return err
 	}
-
 	log.Infof("== RecvLoop: begin ==")
-	err = t.tms.RecvLoop(func(f services.Fragment) {
+	err = t1.RecvLoop(func(f services.Fragment) {
 		ph, data, aux, err := f.ParseEx()
 		log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
 		log.Infoln("    ", data, aux, err)
@@ -303,7 +347,7 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 				services.ResponseWithReturnValueInPayload, // MessageType
 				payload,                      // payloadBytes
 				dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
-			if err := t.tms.Conn.Send(buf); err != nil {
+			if err := t1.Conn.Send(buf); err != nil {
 				log.Errorln("Ack failed:")
 				return
 			}
@@ -314,7 +358,7 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 
 		if ack {
 			b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
-			if err := t.tms.Conn.Send(b); err != nil {
+			if err := t1.Conn.Send(b); err != nil {
 				log.Errorln("Ack failed:")
 				return
 			}
@@ -323,4 +367,39 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 
 	log.Errorf("== RecvLoop: end with %v==", err)
 	return err
+}
+
+// The following is for iOS version < 14.0
+func (t *XctestRunner) initiateSessionWithIdentifier(sessionIdentifier uuid.UUID, version uint64) (uint64, error) {
+	const method = "_IDE_initiateSessionWithIdentifier:forClient:atPath:protocolVersion:"
+	f, err := t.channel.Call(method,
+		nskeyedarchiver.NewNSUUID(sessionIdentifier),
+		"thephonedoesntcarewhatisendhereitseems",
+		"/Applications/Xcode.app",
+		version)
+	if err != nil {
+		log.Errorf("%v: failed:%v", method, err)
+		return 0, err
+	}
+	reply, _, err := f.Parse()
+	if _, ok := reply[0].(uint64); !ok {
+		log.Errorf("%v: invalid reply:%v", method, err)
+		return 0, fmt.Errorf("%v: invalid reply:%v", method, err)
+	}
+	return reply[0].(uint64), nil
+}
+
+func (t *XctestRunner) initiateControlSession(pid uint64, version uint64) (uint64, error) {
+	const method = "_IDE_initiateControlSessionForTestProcessID:protocolVersion:"
+	f, err := t.channel2.Call(method, pid, version)
+	if err != nil {
+		log.Errorf("%v: failed:%v", method, err)
+		return 0, err
+	}
+	reply, _, err := f.Parse()
+	if _, ok := reply[0].(uint64); !ok {
+		log.Errorf("%v: invalid reply:%v", method, err)
+		return 0, fmt.Errorf("%v: invalid reply:%v", method, err)
+	}
+	return reply[0].(uint64), nil
 }

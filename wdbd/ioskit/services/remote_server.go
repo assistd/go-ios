@@ -55,10 +55,12 @@ func (b *RemoteServer) Init(device ios.DeviceEntry) error {
 	if err := b.init(device); err != nil {
 		return err
 	}
-	if err := b.PerformHandshake(); err != nil {
-		b.Close()
-		return err
-	}
+	/*
+		if err := b.PerformHandshake(); err != nil {
+			b.Close()
+			return err
+		}
+	*/
 	return nil
 }
 
