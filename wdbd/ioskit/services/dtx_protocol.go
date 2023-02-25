@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
@@ -133,15 +134,19 @@ func (c *Fragment) Get() ([]byte, error) {
 }
 
 func (c *Fragment) Parse() (payload []interface{}, aux map[string]interface{}, err error) {
+	_, payload, aux, err = c.ParseEx()
+	return
+}
+
+func (c *Fragment) ParseEx() (pheader DTXPayloadHeader, payload []interface{}, aux map[string]interface{}, err error) {
 	b := c.buf.Bytes()
-	pheader := DTXPayloadHeader{}
 	pheader.ReadFrom(b)
 	pblen := pheader.Length()
 
 	if pheader.AuxiliaryLength > 0 {
 		auxheader := DTXAuxiliaryHeader{}
 		auxheader.ReadFrom(b[pblen:])
-		log.Infof("aux header:%#v", auxheader)
+		// log.Infof("aux header:%#v", auxheader)
 
 		off := pblen + auxheader.Length()
 		auxiliary := dtx.DecodeAuxiliary(b[off : off+int(auxheader.AuxiliarySize)])
@@ -199,12 +204,16 @@ func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
 	c.current.AddFirst(header)
 }
 
-func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
+func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) (f Fragment, b bool) {
 	c.current.Add(header, chunk)
 	if c.current.IsFull() {
+		f = c.current
+		b = true
 		c.queue = append(c.queue, c.current)
 		c.current.reset()
+		return
 	}
+	return
 }
 
 func (c *ChannelFragmenter) Get() (Fragment, error) {
@@ -215,4 +224,42 @@ func (c *ChannelFragmenter) Get() (Fragment, error) {
 	}
 
 	return Fragment{}, errors.New("no valid fragment")
+}
+
+// All the known MessageTypes
+const (
+	//Ack is the messagetype for a 16 byte long acknowleding DtxMessage.
+	Ack = 0x0
+	//Uknown
+	UnknownTypeOne = 0x1
+	//Methodinvocation is the messagetype for a remote procedure call style DtxMessage.
+	Methodinvocation = 0x2
+	//ResponseWithReturnValueInPayload is the response for a method call that has a return value
+	ResponseWithReturnValueInPayload = 0x3
+	//DtxTypeError is the messagetype for a DtxMessage containing an error
+	DtxTypeError = 0x4
+)
+
+// This is only used for creating nice String() output
+var messageTypeLookup = map[int]string{
+	Ack:                              `Ack`,
+	Methodinvocation:                 `Methodinvocation`,
+	ResponseWithReturnValueInPayload: `ResponseWithReturnValueInPayload`,
+	DtxTypeError:                     `Error`,
+}
+
+func LogDtx(d DTXMessageHeader, p DTXPayloadHeader) string {
+	var e = ""
+	if d.ExpectsReply == 1 {
+		e = "e"
+	}
+
+	desc, ok := messageTypeLookup[int(p.Flags)]
+	if !ok {
+		desc = "Unknown"
+	}
+
+	return fmt.Sprintf("i%d.%d%s c%d t:%v[%s] mlen:%d aux_len%d totoal%d",
+		d.Identifier, d.ConversationIndex, e, d.ChannelCode, p.Flags, desc,
+		d.PayloadLength, p.AuxiliaryLength, p.TotalPayloadLength-uint64(p.AuxiliaryLength))
 }

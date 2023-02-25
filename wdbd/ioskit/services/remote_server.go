@@ -159,7 +159,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (Fragment, error) {
 			frag, err := fragmenter.Get()
 			if err == nil {
 				// not supported compression
-				log.Infof("<-channel:%v fulled", channel)
+				// log.Infof("<-channel:%v fulled", channel)
 				return frag, nil
 			}
 		}
@@ -180,7 +180,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (Fragment, error) {
 
 		if mheader.ConversationIndex == 0 {
 			if int(mheader.Identifier) > r.curMessage {
-				log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", mheader.Identifier, r.curMessage)
+				// log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", mheader.Identifier, r.curMessage)
 				r.curMessage = int(mheader.Identifier)
 			}
 		}
@@ -203,7 +203,11 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (Fragment, error) {
 			return Fragment{}, err
 		}
 
-		log.Infof("<- [%v] %#v, chunk:%v", channel, mheader, len(chunk))
-		fragmenter.Add(mheader, chunk)
+		log.Infof("[%v]<--[%v] %d:%d, chunk:%v", channel, mheader.ChannelCode, mheader.FragmentId, mheader.FragmentCount, len(chunk))
+		if f, full := fragmenter.Add(mheader, chunk); full {
+			ph, data, aux, err := f.ParseEx()
+			log.Infoln("  ", LogDtx(*mheader, ph))
+			log.Infoln("    ", data, aux, err)
+		}
 	}
 }

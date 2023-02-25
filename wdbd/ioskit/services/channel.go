@@ -32,7 +32,7 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 	for _, arg := range args {
 		auxiliary.AddNsKeyedArchivedObject(arg)
 	}
-	err := c.r.SendMessage(c.value, selector, auxiliary, true)
+	err := c.r.SendMessage(c.value, selector, auxiliary, false)
 	if err != nil {
 		return err
 	}
@@ -51,6 +51,11 @@ func (c Channel) RecvLoop() error {
 		data, aux, err := reply.Parse()
 		if err != nil {
 			log.Errorln(err)
+			continue
+		}
+
+		if len(data) == 0 {
+			log.Errorln("unknown reply")
 			continue
 		}
 
