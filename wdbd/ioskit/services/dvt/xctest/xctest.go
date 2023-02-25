@@ -288,6 +288,15 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 		}
 
 		switch method {
+		case "_requestChannelWithCode:identifier:":
+			// aux[0].int
+		case "_notifyOfPublishedCapabilities:":
+		case "_XCT_didBeginExecutingTestPlan":
+		case "_XCT_didBeginInitializingForUITesting":
+		case "_XCT_testSuite:didStartAt:":
+		case "_XCT_testCase:method:willStartActivity:":
+		case "_XCT_testCase:method:didFinishActivity:":
+		case "_XCT_testCaseDidStartForTestClass:method:":
 		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
 		case "_XCT_logDebugMessage:":
 		case "_XCT_testRunnerReadyWithCapabilities:":
@@ -306,6 +315,8 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 				return
 			}
 		case "_XCT_didFinishExecutingTestPlan":
+		default:
+			log.Warningln(method)
 		}
 
 		if ack {
