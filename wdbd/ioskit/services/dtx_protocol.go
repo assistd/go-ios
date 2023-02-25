@@ -134,69 +134,52 @@ func (c *Fragment) Get() ([]byte, error) {
 }
 
 func (c *Fragment) Parse() (payload []interface{}, aux map[string]interface{}, err error) {
-	_, payload, aux, err = c.ParseEx()
+	_, p, args, e := c.ParseEx()
+	payload = p
+	if len(args) > 0 {
+		aux = args[0].(map[string]interface{})
+	}
+	err = e
 	return
 }
 
-func (c *Fragment) ParseEx() (pheader DTXPayloadHeader, payload []interface{}, aux map[string]interface{}, err error) {
+func (c *Fragment) ParseEx() (pheader DTXPayloadHeader, payload []interface{}, aux []interface{}, err error) {
 	b := c.buf.Bytes()
 	pheader.ReadFrom(b)
 	pblen := pheader.Length()
+	// log.Infof("aux header:%#v", auxheader)
 
-	if pheader.AuxiliaryLength > 0 {
-		auxheader := DTXAuxiliaryHeader{}
-		auxheader.ReadFrom(b[pblen:])
-		// log.Infof("aux header:%#v", auxheader)
-
-		off := pblen + auxheader.Length()
-		auxiliary := dtx.DecodeAuxiliary(b[off : off+int(auxheader.AuxiliarySize)])
-		args := auxiliary.GetArguments()
-		if len(args) == 0 {
-			err = errors.New("empty auxiliary dictionary")
-			return
-		}
-
-		data, ok := args[0].([]byte)
-		if !ok {
-			err = errors.New("invalid aux")
-			return
-		}
-
-		unarchived, e := nskeyedarchiver.Unarchive(data)
-		if e != nil {
-			err = e
-			return
-		}
-
-		if len(unarchived) == 0 {
-			err = errors.New("unarchived failed")
-			return
-		}
-
-		a, ok := unarchived[0].(map[string]interface{})
-		if !ok {
-			err = errors.New("invalid map")
-			return
-		}
-
-		aux = a
-		// log.Infof("aux:%#v", aux)
-	}
-
+	// payload
 	if pheader.TotalPayloadLength-uint64(pheader.AuxiliaryLength) > 0 {
 		pb := b[pblen+int(pheader.AuxiliaryLength):]
 		payload, err = nskeyedarchiver.Unarchive(pb)
 		if err != nil {
-			return
-		}
-		if len(payload) != 1 {
-			err = errors.New("payload size != 1")
-			return
+			err = fmt.Errorf("unarchived failed:%v", err)
+			// log.Errorf("payload:%#v", payload[0])
 		}
 
-		// log.Infof("payload:%#v", payload[0])
 	}
 
+	// auxiliary
+	if pheader.AuxiliaryLength > 0 {
+		auxheader := DTXAuxiliaryHeader{}
+		auxheader.ReadFrom(b[pblen:])
+		off := pblen + auxheader.Length()
+		auxiliary := dtx.DecodeAuxiliary(b[off : off+int(auxheader.AuxiliarySize)])
+		args := auxiliary.GetArguments()
+		// log.Infof("   %v", auxiliary.String())
+		aux = make([]interface{}, len(args))
+		for i := 0; i < len(args); i++ {
+			data, ok := args[i].([]byte)
+			if ok {
+				if v, e := nskeyedarchiver.Unarchive(data); e == nil {
+					aux[i] = v[0]
+					continue
+				}
+			}
+			aux[i] = args[i]
+		}
+	}
 	return
 }
 
@@ -259,7 +242,7 @@ func LogDtx(d DTXMessageHeader, p DTXPayloadHeader) string {
 		desc = "Unknown"
 	}
 
-	return fmt.Sprintf("i%d.%d%s c%d t:%v[%s] mlen:%d aux_len%d totoal%d",
+	return fmt.Sprintf("i%d.%d%s c%d t:%v[%s] mlen:%d aux_len%d payload%d",
 		d.Identifier, d.ConversationIndex, e, d.ChannelCode, p.Flags, desc,
 		d.PayloadLength, p.AuxiliaryLength, p.TotalPayloadLength-uint64(p.AuxiliaryLength))
 }
