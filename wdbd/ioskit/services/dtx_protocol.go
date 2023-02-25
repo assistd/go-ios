@@ -78,16 +78,8 @@ func (d *DTXAuxiliaryHeader) ReadFrom(b []byte) {
 	d.Unknown2 = binary.LittleEndian.Uint32(b[12:])
 }
 
-type fHeader struct {
-	FragmentCount     uint16
-	Identifier        uint32
-	ConversationIndex uint32
-	ChannelCode       uint32
-	ExpectsReply      uint32
-}
-
 type Fragment struct {
-	fHeader
+	DTXMessageHeader
 	buf      bytes.Buffer
 	finished bool
 }
@@ -96,19 +88,12 @@ type ChannelFragmenter struct {
 	current Fragment
 }
 
-func (c *Fragment) AddFirst(header *DTXMessageHeader) {
-	c.FragmentCount = header.FragmentCount
-	c.Identifier = header.Identifier
-	c.ConversationIndex = header.ConversationIndex
-	c.ChannelCode = header.ChannelCode
-	c.ExpectsReply = header.ExpectsReply
-}
-
-func (c *Fragment) Add(header *DTXMessageHeader, chunk []byte) {
+func (c *Fragment) Add(header DTXMessageHeader, chunk []byte) {
 	if c.finished {
-		log.Panicf("add to fulled fheader:%#v header:%#v", c.fHeader, header)
+		log.Panicf("add to fulled fheader:%#v header:%#v", c.DTXMessageHeader, header)
 	}
 
+	c.DTXMessageHeader = header
 	c.buf.Write(chunk)
 	if header.FragmentId == header.FragmentCount-1 {
 		// last fragment
@@ -186,11 +171,7 @@ func (c *Fragment) ParseEx() (pheader DTXPayloadHeader, payload []interface{}, a
 	return
 }
 
-func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
-	c.current.AddFirst(header)
-}
-
-func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) (f Fragment, b bool) {
+func (c *ChannelFragmenter) Add(header DTXMessageHeader, chunk []byte) (f Fragment, b bool) {
 	c.current.Add(header, chunk)
 	if c.current.IsFull() {
 		f = c.current

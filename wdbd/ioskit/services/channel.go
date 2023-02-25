@@ -2,7 +2,6 @@ package services
 
 import (
 	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
-	log "github.com/sirupsen/logrus"
 )
 
 type Channel struct {
@@ -37,40 +36,4 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 		return err
 	}
 	return nil
-}
-
-func (c Channel) RecvLoop() error {
-	for {
-		log.Infof("RecvLoop: %v", c.value)
-		reply, err := c.r.RecvChannel(ChannelCode(c.value))
-		if err != nil {
-			log.Errorln(err)
-			return err
-		}
-
-		data, aux, err := reply.Parse()
-		if err != nil {
-			log.Errorln(err)
-			continue
-		}
-
-		if len(data) == 0 {
-			log.Errorln("unknown reply")
-			continue
-		}
-
-		log.Infoln("recevied:", data, aux)
-		method, ok := data[0].(string)
-		if !ok {
-			log.Errorln("invalid method")
-			continue
-		}
-		switch method {
-		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
-		case "_XCT_logDebugMessage:":
-		case "_XCT_testRunnerReadyWithCapabilities:":
-			// TODO??
-		case "_XCT_didFinishExecutingTestPlan":
-		}
-	}
 }

@@ -17,11 +17,11 @@ import (
 )
 
 type XctestRunner struct {
-	channel    services.Channel
-	channel2   services.Channel
-	idechannel services.Channel
-	sps        *dvt.DvtSecureSocketProxyService
-	device     ios.DeviceEntry
+	channel  services.Channel
+	channel2 services.Channel
+	sps      *dvt.DvtSecureSocketProxyService
+	tms      *dvt.TestManagerdSecureService
+	device   ios.DeviceEntry
 }
 
 type XctestAppInfo struct {
@@ -99,15 +99,13 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdS
 		log.Infoln("xctest-runner: ", err)
 		return nil, err
 	}
-	idechannel := tms2.GetXcodeIDEChannel()
-	log.Infoln("xctest-runner: ", idechannel)
 
 	s := &XctestRunner{
-		channel:    channel,
-		channel2:   channel2,
-		idechannel: idechannel,
-		sps:        sps,
-		device:     tms.GetDevice(),
+		channel:  channel,
+		channel2: channel2,
+		sps:      sps,
+		tms:      tms2,
+		device:   tms.GetDevice(),
 	}
 	return s, nil
 }
@@ -190,13 +188,7 @@ func (t *XctestRunner) Xctest(
 		return err
 	}
 	log.Infof("authorizing test session for pid %d successful %t", process.Pid, ok)
-
-	err = t.startExecutingTestPlanWithProtocolVersion(36)
-	if err != nil {
-		return err
-	}
-
-	return t.idechannel.RecvLoop()
+	return t.startExecutingTestPlanWithProtocolVersion(36)
 }
 
 func (t *XctestRunner) initiateControlSessionWithCapabilities() (caps nskeyedarchiver.XCTCapabilities, err error) {
@@ -263,11 +255,37 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 
 func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64) error {
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
-	err := t.idechannel.CallAsync(method, version)
+	err := t.tms.GetXcodeIDEChannel().CallAsync(method, version)
 	if err != nil {
 		log.Errorf("%v: failed:%v", method, err)
 		return err
 	}
 
-	return nil
+	log.Infof("== RecvLoop: begin ==")
+	err = t.tms.RecvLoop(func(f services.Fragment) {
+		ph, data, aux, err := f.ParseEx()
+		log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
+		log.Infoln("    ", data, aux, err)
+
+		if len(data) == 0 {
+			log.Panic("unknown reply")
+			return
+		}
+		method, ok := data[0].(string)
+		if !ok {
+			log.Panic("invalid method")
+			return
+		}
+
+		switch method {
+		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
+		case "_XCT_logDebugMessage:":
+		case "_XCT_testRunnerReadyWithCapabilities:":
+			// TODO??
+		case "_XCT_didFinishExecutingTestPlan":
+		}
+	})
+
+	log.Errorf("== RecvLoop: end with %v==", err)
+	return err
 }

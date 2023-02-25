@@ -150,7 +150,7 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 }
 
 func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
-	mheader := &DTXMessageHeader{}
+	mheader := DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
 	for {
 		// TODO: 这里的实现与pymobiledevice3不一样，没有使用队列，是否可能有问题？
@@ -193,7 +193,6 @@ func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
 
 		if mheader.FragmentCount > 1 && mheader.FragmentId == 0 {
 			// when reading multiple message fragments, the first fragment contains only a message header
-			fragmenter.AddFirst(mheader)
 			continue
 		}
 
@@ -206,8 +205,52 @@ func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
 		log.Infof("[%v]<--[%v] %d:%d, chunk:%v", channel, mheader.ChannelCode, mheader.FragmentId, mheader.FragmentCount, len(chunk))
 		if f, full := fragmenter.Add(mheader, chunk); full {
 			ph, data, aux, err := f.ParseEx()
-			log.Infoln("  ", LogDtx(*mheader, ph))
+			log.Infoln("  ", LogDtx(mheader, ph))
 			log.Infoln("    ", data, aux, err)
+		}
+	}
+}
+
+func (r *RemoteServer) RecvLoop(onFragment func(Fragment)) (err error) {
+	mheader := DTXMessageHeader{}
+	buf := make([]byte, mheader.Length())
+	fMap := make(map[ChannelCode]*Fragment)
+	for {
+		_, err = io.ReadFull(r.Conn.Reader(), buf)
+		if err != nil {
+			return
+		}
+
+		mheader.ReadFrom(buf)
+		if mheader.ConversationIndex == 0 {
+			if int(mheader.Identifier) > r.curMessage {
+				// log.Warningf("remote-server: dtx header identifier:%d > curMessage:%d", mheader.Identifier, r.curMessage)
+				r.curMessage = int(mheader.Identifier)
+			}
+		}
+
+		f, ok := fMap[ChannelCode(mheader.ChannelCode)]
+		if !ok {
+			f = &Fragment{}
+			fMap[ChannelCode(mheader.ChannelCode)] = f
+		}
+
+		if mheader.FragmentCount > 1 && mheader.FragmentId == 0 {
+			// when reading multiple message fragments, the first fragment contains only a message header
+			continue
+		}
+
+		chunk := make([]byte, mheader.PayloadLength)
+		_, err = io.ReadFull(r.Conn.Reader(), chunk)
+		if err != nil {
+			return
+		}
+
+		log.Infof("[%v]<-- %d:%d, chunk:%v", mheader.ChannelCode, mheader.FragmentId, mheader.FragmentCount, len(chunk))
+		f.Add(mheader, chunk)
+		if f.IsFull() {
+			onFragment(*f)
+			f.reset()
 		}
 	}
 }
