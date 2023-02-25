@@ -18,6 +18,7 @@ import (
 
 type XctestRunner struct {
 	channel    services.Channel
+	channel2   services.Channel
 	idechannel services.Channel
 	sps        *dvt.DvtSecureSocketProxyService
 	device     ios.DeviceEntry
@@ -84,7 +85,7 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 	return nil
 }
 
-func NewXctestRunner(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) (*XctestRunner, error) {
+func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) (*XctestRunner, error) {
 	const identifier = "dtxproxy:XCTestManager_IDEInterface:XCTestManager_DaemonConnectionInterface"
 	log.Infoln("xctest-runner: MakeChannel")
 	channel, err := tms.MakeChannel(identifier)
@@ -93,10 +94,17 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocke
 		return nil, err
 	}
 
-	idechannel := tms.GetXcodeIDEChannel()
+	channel2, err := tms2.MakeChannel(identifier)
+	if err != nil {
+		log.Infoln("xctest-runner: ", err)
+		return nil, err
+	}
+	idechannel := tms2.GetXcodeIDEChannel()
 	log.Infoln("xctest-runner: ", idechannel)
+
 	s := &XctestRunner{
 		channel:    channel,
+		channel2:   channel2,
 		idechannel: idechannel,
 		sps:        sps,
 		device:     tms.GetDevice(),
@@ -159,6 +167,11 @@ func (t *XctestRunner) Xctest(
 		"XCTestConfigurationFilePath":     info.absConfigPath, // info.testRunnerHomePath + /tmp + <session>.xctestconfiguration
 		"XCTestSessionIdentifier":         info.testSessionID.String(),
 	}
+
+	log.Infoln("XCTestBundlePath", info.testrunnerAppPath+"/PlugIns/"+info.XctestConfigFileName)
+	log.Infoln("XCTestConfigurationFilePath", info.absConfigPath)
+	log.Infoln("XCTestSessionIdentifier", info.testSessionID.String())
+
 	for k, v := range env {
 		_env[k] = v
 	}
@@ -168,6 +181,9 @@ func (t *XctestRunner) Xctest(
 		return err
 	}
 	//TODO: defer process.Close()
+
+	// 测试证明，下面的延时不是必须的
+	// time.Sleep(time.Second)
 
 	ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
 	if err != nil {
@@ -209,7 +225,7 @@ func (t *XctestRunner) initiateControlSessionWithCapabilities() (caps nskeyedarc
 
 func (t *XctestRunner) initiateSessionWithIdentifierAndCaps(uuid uuid.UUID, in nskeyedarchiver.XCTCapabilities) (caps nskeyedarchiver.XCTCapabilities, err error) {
 	const method = "_IDE_initiateSessionWithIdentifier:capabilities:"
-	reply, err2 := t.channel.Call(method, nskeyedarchiver.NewNSUUID(uuid), caps)
+	reply, err2 := t.channel2.Call(method, nskeyedarchiver.NewNSUUID(uuid), caps)
 	if err2 != nil {
 		err = err2
 		return

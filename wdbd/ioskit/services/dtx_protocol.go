@@ -137,7 +137,10 @@ func (c *Fragment) Parse() (payload []interface{}, aux map[string]interface{}, e
 	_, p, args, e := c.ParseEx()
 	payload = p
 	if len(args) > 0 {
-		aux = args[0].(map[string]interface{})
+		_aux, ok := args[0].(map[string]interface{})
+		if ok {
+			aux = _aux
+		}
 	}
 	err = e
 	return

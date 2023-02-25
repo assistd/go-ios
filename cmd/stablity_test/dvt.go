@@ -25,12 +25,12 @@ func TestLaunch(dvt *dvt.DvtSecureSocketProxyService) {
 		log.Fatal(err)
 	}
 
-	pid, err := deviceInfo.Launch("com.prife.demo1", nil, nil, false, false)
+	pid, err := deviceInfo.Launch("com.teapotapps.iperf", nil, nil, false, false)
 	log.Infoln(pid, err)
 }
 
-func TestXctest(tms *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) {
-	runner, err := xctest.NewXctestRunner(tms, sps)
+func TestXctest(tms, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) {
+	runner, err := xctest.NewXctestRunner(tms, tms2, sps)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,12 +51,21 @@ func TestDvt() {
 	}
 	defer sps.Close()
 
+	// TestLaunch(sps)
+	// os.Exit(0)
+
 	tms, err := dvt.NewTestManagerdSecureService(device)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer tms.Close()
 
-	TestXctest(tms, sps)
+	tms2, err := dvt.NewTestManagerdSecureService(device)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tms2.Close()
+
+	TestXctest(tms, tms2, sps)
 	os.Exit(0)
 }
