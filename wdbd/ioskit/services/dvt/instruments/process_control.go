@@ -40,6 +40,8 @@ func (d *ProcessControl) Launch(bundleId string, env map[string]interface{}, arg
 	options := map[string]interface{}{
 		"KillExisting":      bool2int(killExisting),
 		"StartSuspendedKey": bool2int(startSuspended),
+		// iOS14以下，ActivateSuspended参数配置后，会在后台拉起xctest，否则会出现黑色窗口
+		"ActivateSuspended": uint64(1),
 	}
 
 	if env == nil {
