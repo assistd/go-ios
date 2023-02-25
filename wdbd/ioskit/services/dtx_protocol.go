@@ -105,6 +105,27 @@ func (c *Fragment) IsFull() bool {
 	return c.finished
 }
 
+func BuildDtxAck(identifier uint32, conversationIndex uint32, channelCode ChannelCode) []byte {
+	buf := make([]byte, 48)
+	// DTXMessageHeader
+	binary.BigEndian.PutUint32(buf, dtx.DtxMessageMagic)
+	binary.LittleEndian.PutUint32(buf[4:], 32)
+	binary.LittleEndian.PutUint16(buf[8:], 0)
+	binary.LittleEndian.PutUint16(buf[10:], 1)
+	binary.LittleEndian.PutUint32(buf[12:], 16)
+	binary.LittleEndian.PutUint32(buf[16:], uint32(identifier))
+	binary.LittleEndian.PutUint32(buf[20:], uint32(conversationIndex+1))
+	binary.LittleEndian.PutUint32(buf[24:], uint32(channelCode))
+	binary.LittleEndian.PutUint32(buf[28:], 0)
+
+	// DTXPayloadHeader
+	binary.LittleEndian.PutUint32(buf[32:], Ack)
+	binary.LittleEndian.PutUint32(buf[36:], 0)
+	binary.LittleEndian.PutUint32(buf[40:], 0)
+	binary.LittleEndian.PutUint32(buf[44:], 0)
+	return buf
+}
+
 func (c *Fragment) reset() {
 	c.finished = false
 	c.buf.Reset()

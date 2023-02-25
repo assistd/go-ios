@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/afc"
+	dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 	"github.com/danielpaulus/go-ios/ios/installationproxy"
 	"github.com/danielpaulus/go-ios/ios/nskeyedarchiver"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services"
@@ -73,8 +75,14 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 	configFilePath := path.Join("tmp", x.testSessionID.String()+".xctestconfiguration")
 	x.absConfigPath = path.Join(x.testRunnerHomePath, configFilePath)
 	testBundleURL := path.Join(x.testrunnerAppPath, "PlugIns", x.XctestConfigFileName)
+
+	// FIXME: go-ios的神奇实现，config只能被操作一次
+	//    config := nskeyedarchiver.NewXCTestConfiguration
+	//    nskeyedarchiver.ArchiveXML(config)
+	//    nskeyedarchiver.ArchiveBin(config) <-- 这一句必崩溃
 	x.config = nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, testBundleURL)
-	configStr, err := nskeyedarchiver.ArchiveXML(x.config)
+	config := nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, testBundleURL)
+	configStr, err := nskeyedarchiver.ArchiveXML(config)
 	if err != nil {
 		return err
 	}
@@ -180,15 +188,16 @@ func (t *XctestRunner) Xctest(
 	}
 	//TODO: defer process.Close()
 
-	// 测试证明，下面的延时不是必须的
-	// time.Sleep(time.Second)
+	// FIXME: 实验证明，这里的延迟是必须的，否则xctest app能拉起，显示黑屏，但不执行test
+	//
+	time.Sleep(time.Second)
 
 	ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
 	if err != nil {
 		return err
 	}
 	log.Infof("authorizing test session for pid %d successful %t", process.Pid, ok)
-	return t.startExecutingTestPlanWithProtocolVersion(36)
+	return t.startExecutingTestPlanWithProtocolVersion(36, info.config)
 }
 
 func (t *XctestRunner) initiateControlSessionWithCapabilities() (caps nskeyedarchiver.XCTCapabilities, err error) {
@@ -253,7 +262,7 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 	return reply[0].(bool), nil
 }
 
-func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64) error {
+func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64, testConfig nskeyedarchiver.XCTestConfiguration) error {
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
 	err := t.tms.GetXcodeIDEChannel().CallAsync(method, version)
 	if err != nil {
@@ -267,6 +276,7 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64)
 		log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
 		log.Infoln("    ", data, aux, err)
 
+		ack := ph.Flags == services.Ack
 		if len(data) == 0 {
 			log.Panic("unknown reply")
 			return
@@ -281,8 +291,29 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64)
 		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
 		case "_XCT_logDebugMessage:":
 		case "_XCT_testRunnerReadyWithCapabilities:":
-			// TODO??
+			ack = false
+			payload, _ := nskeyedarchiver.ArchiveBin(testConfig)
+			buf, _ := dtx.Encode(
+				int(f.Identifier),  // Identifier
+				1,                  // ConversationIndex
+				int(f.ChannelCode), // ChannelCode
+				false,              // ExpectsReply
+				services.ResponseWithReturnValueInPayload, // MessageType
+				payload,                      // payloadBytes
+				dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
+			if err := t.tms.Conn.Send(buf); err != nil {
+				log.Errorln("Ack failed:")
+				return
+			}
 		case "_XCT_didFinishExecutingTestPlan":
+		}
+
+		if ack {
+			b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
+			if err := t.tms.Conn.Send(b); err != nil {
+				log.Errorln("Ack failed:")
+				return
+			}
 		}
 	})
 
