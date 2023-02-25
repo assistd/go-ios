@@ -149,17 +149,19 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 	return chanel, nil
 }
 
-func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, error) {
+func (r *RemoteServer) RecvMessage(channel ChannelCode) (Fragment, error) {
 	mheader := &DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
 	for {
 		// TODO: 这里的实现与pymobiledevice3不一样，没有使用队列，是否可能有问题？
 		fragmenter, ok := r.channelMessages[channel]
-		if ok && fragmenter.IsFull() {
-			// not supported compression
-			log.Infof("<-channel:%v fulled", channel)
-			delete(r.channelMessages, channel)
-			return fragmenter, nil
+		if ok {
+			frag, err := fragmenter.Get()
+			if err == nil {
+				// not supported compression
+				log.Infof("<-channel:%v fulled", channel)
+				return frag, nil
+			}
 		}
 
 		/*
@@ -172,7 +174,7 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 
 		_, err := io.ReadFull(r.Conn.Reader(), buf)
 		if err != nil {
-			return nil, err
+			return Fragment{}, err
 		}
 		mheader.ReadFrom(buf)
 
@@ -198,10 +200,10 @@ func (r *RemoteServer) RecvMessage(channel ChannelCode) (*ChannelFragmenter, err
 		chunk := make([]byte, mheader.PayloadLength)
 		_, err = io.ReadFull(r.Conn.Reader(), chunk)
 		if err != nil {
-			return nil, err
+			return Fragment{}, err
 		}
 
-		log.Infof("<- fragment: %#v, chunk:%v", mheader, len(chunk))
+		log.Infof("<- [%v] %#v, chunk:%v", channel, mheader, len(chunk))
 		fragmenter.Add(mheader, chunk)
 	}
 }

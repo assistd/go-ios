@@ -14,14 +14,14 @@ func BuildChannel(r *RemoteServer, channel uint32) Channel {
 	return Channel{r, channel}
 }
 
-func (c Channel) Call(selector string, args ...interface{}) (*ChannelFragmenter, error) {
+func (c Channel) Call(selector string, args ...interface{}) (Fragment, error) {
 	auxiliary := dtx.NewPrimitiveDictionary()
 	for _, arg := range args {
 		auxiliary.AddNsKeyedArchivedObject(arg)
 	}
 	err := c.r.SendMessage(c.value, selector, auxiliary, true)
 	if err != nil {
-		return nil, err
+		return Fragment{}, err
 	}
 
 	return c.r.RecvMessage(ChannelCode(c.value))
@@ -32,7 +32,7 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 	for _, arg := range args {
 		auxiliary.AddNsKeyedArchivedObject(arg)
 	}
-	err := c.r.SendMessage(c.value, selector, auxiliary, false)
+	err := c.r.SendMessage(c.value, selector, auxiliary, true)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,11 @@ func (c Channel) RecvLoop() error {
 		}
 
 		log.Infoln("recevied:", data, aux)
-		method := data[0].(string)
+		method, ok := data[0].(string)
+		if !ok {
+			log.Errorln("invalid method")
+			continue
+		}
 		switch method {
 		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
 		case "_XCT_logDebugMessage:":

@@ -84,13 +84,18 @@ type fHeader struct {
 	ChannelCode       uint32
 	ExpectsReply      uint32
 }
-type ChannelFragmenter struct {
+
+type Fragment struct {
 	fHeader
 	buf      bytes.Buffer
 	finished bool
 }
+type ChannelFragmenter struct {
+	queue   []Fragment
+	current Fragment
+}
 
-func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
+func (c *Fragment) AddFirst(header *DTXMessageHeader) {
 	c.FragmentCount = header.FragmentCount
 	c.Identifier = header.Identifier
 	c.ConversationIndex = header.ConversationIndex
@@ -98,7 +103,7 @@ func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
 	c.ExpectsReply = header.ExpectsReply
 }
 
-func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
+func (c *Fragment) Add(header *DTXMessageHeader, chunk []byte) {
 	if c.finished {
 		log.Panicf("add to fulled fheader:%#v header:%#v", c.fHeader, header)
 	}
@@ -110,11 +115,16 @@ func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
 	}
 }
 
-func (c *ChannelFragmenter) IsFull() bool {
+func (c *Fragment) IsFull() bool {
 	return c.finished
 }
 
-func (c *ChannelFragmenter) Get() ([]byte, error) {
+func (c *Fragment) reset() {
+	c.finished = false
+	c.buf.Reset()
+}
+
+func (c *Fragment) Get() ([]byte, error) {
 	if !c.finished {
 		return nil, errors.New("fragments is not full")
 	}
@@ -122,7 +132,7 @@ func (c *ChannelFragmenter) Get() ([]byte, error) {
 	return c.buf.Bytes(), nil
 }
 
-func (c *ChannelFragmenter) Parse() (payload []interface{}, aux map[string]interface{}, err error) {
+func (c *Fragment) Parse() (payload []interface{}, aux map[string]interface{}, err error) {
 	b := c.buf.Bytes()
 	pheader := DTXPayloadHeader{}
 	pheader.ReadFrom(b)
@@ -183,4 +193,26 @@ func (c *ChannelFragmenter) Parse() (payload []interface{}, aux map[string]inter
 	}
 
 	return
+}
+
+func (c *ChannelFragmenter) AddFirst(header *DTXMessageHeader) {
+	c.current.AddFirst(header)
+}
+
+func (c *ChannelFragmenter) Add(header *DTXMessageHeader, chunk []byte) {
+	c.current.Add(header, chunk)
+	if c.current.IsFull() {
+		c.queue = append(c.queue, c.current)
+		c.current.reset()
+	}
+}
+
+func (c *ChannelFragmenter) Get() (Fragment, error) {
+	if len(c.queue) > 0 {
+		f := c.queue[0]
+		c.queue = c.queue[1:]
+		return f, nil
+	}
+
+	return Fragment{}, errors.New("no valid fragment")
 }
