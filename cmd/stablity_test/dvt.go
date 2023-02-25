@@ -35,7 +35,12 @@ func TestXctest(tms, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSock
 		log.Fatal(err)
 	}
 
-	err = runner.Xctest("com.wetest.wda-scrcpy.xctrunner", nil, nil, false)
+	info := xctest.XctestAppInfo{
+		BundleID:             "com.wetest.wda-scrcpy.xctrunner",
+		TestRunnerBundleID:   "com.wetest.wda-scrcpy.xctrunner",
+		XctestConfigFileName: "scrcpy.xctest",
+	}
+	err = runner.Xctest(info, nil, nil, false)
 	log.Errorln(err)
 }
 

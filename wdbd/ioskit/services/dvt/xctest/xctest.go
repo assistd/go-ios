@@ -118,14 +118,7 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdS
 	return s, nil
 }
 
-func (t *XctestRunner) Xctest(
-	bundleId string, env map[string]interface{}, args []interface{}, killExisting bool) error {
-	info := XctestAppInfo{
-		BundleID:             "com.wetest.wda-scrcpy.xctrunner",
-		TestRunnerBundleID:   "com.wetest.wda-scrcpy.xctrunner",
-		XctestConfigFileName: "scrcpy.xctest",
-	}
-
+func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, args []interface{}, killExisting bool) error {
 	err := info.Setup(t.device)
 	if err != nil {
 		return err
@@ -182,7 +175,7 @@ func (t *XctestRunner) Xctest(
 		_env[k] = v
 	}
 
-	process, err := p.Launch(bundleId, _env, _args, killExisting, false)
+	process, err := p.Launch(info.BundleID, _env, _args, killExisting, false)
 	if err != nil {
 		return err
 	}
