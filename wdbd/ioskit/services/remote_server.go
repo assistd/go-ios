@@ -75,7 +75,7 @@ func (r *RemoteServer) PerformHandshake() error {
 	if err != nil {
 		return err
 	}
-	resp, err := r.RecvMessage(DtxBroadcastChannelId)
+	resp, err := r.RecvChannel(DtxBroadcastChannelId)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 		return Channel{}, err
 	}
 	// wait ACK
-	_, err = r.RecvMessage(DtxBroadcastChannelId)
+	_, err = r.RecvChannel(DtxBroadcastChannelId)
 	if err != nil {
 		panic(err)
 	}
@@ -149,7 +149,7 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 	return chanel, nil
 }
 
-func (r *RemoteServer) RecvMessage(channel ChannelCode) (Fragment, error) {
+func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
 	mheader := &DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
 	for {

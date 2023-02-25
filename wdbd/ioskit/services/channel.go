@@ -24,7 +24,7 @@ func (c Channel) Call(selector string, args ...interface{}) (Fragment, error) {
 		return Fragment{}, err
 	}
 
-	return c.r.RecvMessage(ChannelCode(c.value))
+	return c.r.RecvChannel(ChannelCode(c.value))
 }
 
 func (c Channel) CallAsync(selector string, args ...interface{}) error {
@@ -42,7 +42,7 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 func (c Channel) RecvLoop() error {
 	for {
 		log.Infof("RecvLoop: %v", c.value)
-		reply, err := c.r.RecvMessage(ChannelCode(c.value))
+		reply, err := c.r.RecvChannel(ChannelCode(c.value))
 		if err != nil {
 			log.Errorln(err)
 			return err
