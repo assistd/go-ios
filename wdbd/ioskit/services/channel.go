@@ -5,6 +5,7 @@ import (
 )
 
 type Channel struct {
+	// TODO: 这里r后需要更换为接口
 	r     *RemoteServer
 	value uint32
 }
@@ -36,4 +37,8 @@ func (c Channel) CallAsync(selector string, args ...interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (c Channel) Service() *RemoteServer {
+	return c.r
 }

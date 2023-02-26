@@ -46,6 +46,10 @@ func (d *DTXMessageHeader) Length() int {
 	return 32
 }
 
+func (d *DTXMessageHeader) NeedAck() bool {
+	return d.ExpectsReply == 1
+}
+
 func (d *DTXPayloadHeader) ReadFrom(b []byte) error {
 	d.Flags = binary.LittleEndian.Uint32(b)
 	d.AuxiliaryLength = binary.LittleEndian.Uint32(b[4:])

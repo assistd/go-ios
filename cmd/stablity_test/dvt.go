@@ -50,12 +50,6 @@ func TestDvt() {
 		log.Fatal(err)
 	}
 
-	sps, err := dvt.NewDvtSecureSocketProxyService(device)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer sps.Close()
-
 	// TestLaunch(sps)
 	// os.Exit(0)
 
@@ -70,6 +64,12 @@ func TestDvt() {
 		log.Fatal(err)
 	}
 	defer tms2.Close()
+
+	sps, err := dvt.NewDvtSecureSocketProxyService(device)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer sps.Close()
 
 	TestXctest(tms, tms2, sps)
 	os.Exit(0)

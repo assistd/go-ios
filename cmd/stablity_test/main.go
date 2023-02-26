@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"path"
 	"runtime"
 	"time"
@@ -23,6 +24,7 @@ func init() {
 			return "", fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	})
+	logrus.SetOutput(os.Stdout)
 	logrus.SetReportCaller(true)
 }
 

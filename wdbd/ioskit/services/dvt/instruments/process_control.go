@@ -75,6 +75,25 @@ func (d *ProcessControl) Launch(bundleId string, env map[string]interface{}, arg
 	}, nil
 }
 
+func (d *ProcessControl) Wait() error {
+	service := d.channel.Service()
+	err := service.RecvLoop(func(f services.Fragment) {
+		ph, data, aux, err := f.ParseEx()
+		log.Infoln("  ### ", services.LogDtx(f.DTXMessageHeader, ph))
+		log.Infoln("    ### ", data, aux, err)
+
+		ack := ph.Flags == services.Ack
+		if ack {
+			b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
+			if err := service.Conn.Send(b); err != nil {
+				log.Errorln("Ack failed:")
+				return
+			}
+		}
+	})
+	return err
+}
+
 func bool2int(v bool) uint64 {
 	if v {
 		return 1

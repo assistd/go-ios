@@ -25,6 +25,7 @@ type XctestRunner struct {
 	tms1     *dvt.TestManagerdSecureService
 	tms2     *dvt.TestManagerdSecureService
 	device   ios.DeviceEntry
+	iOS14    bool
 }
 
 type XctestAppInfo struct {
@@ -94,10 +95,10 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 	return nil
 }
 
-func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) (*XctestRunner, error) {
+func NewXctestRunner(tms1 *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) (*XctestRunner, error) {
 	const identifier = "dtxproxy:XCTestManager_IDEInterface:XCTestManager_DaemonConnectionInterface"
 	log.Infoln("xctest-runner: MakeChannel")
-	channel, err := tms.MakeChannel(identifier)
+	channel, err := tms1.MakeChannel(identifier)
 	if err != nil {
 		log.Infoln("xctest-runner: ", err)
 		return nil, err
@@ -113,17 +114,17 @@ func NewXctestRunner(tms *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdS
 		channel:  channel,
 		channel2: channel2,
 		sps:      sps,
-		tms1:     tms,
+		tms1:     tms1,
 		tms2:     tms2,
-		device:   tms.GetDevice(),
+		device:   tms1.GetDevice(),
+		iOS14:    tms2.IsSecure(),
 	}
 	return s, nil
 }
 
 func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, args []interface{}, killExisting bool) error {
-	iOS14 := t.tms2.IsSecure()
 	var protover uint64
-	if iOS14 {
+	if t.iOS14 {
 		protover = 36
 	} else {
 		protover = 25
@@ -134,7 +135,7 @@ func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, ar
 		return err
 	}
 
-	if iOS14 {
+	if t.iOS14 {
 		_, err = t.initiateControlSessionWithCapabilities()
 		if err != nil {
 			return err
@@ -172,7 +173,7 @@ func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, ar
 		"XCTestSessionIdentifier":     info.testSessionID.String(),
 	}
 
-	if iOS14 {
+	if t.iOS14 {
 		ios14args := []interface{}{
 			"-NSTreatUnknownArgumentsAsOpen", "NO", "-ApplePersistenceIgnoreState", "YES",
 		}
@@ -203,15 +204,23 @@ func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, ar
 	}
 
 	// launch xctest process
-	process, err := p.Launch(info.BundleID, _env, _args, killExisting, false)
+	process, err := p.Launch(info.BundleID, _env, _args, true, false)
 	if err != nil {
 		return err
 	}
 	//TODO: defer process.Close()
 
-	if iOS14 {
-		// FIXME: 实验证明，这里的延迟是必须的，否则xctest app能拉起，显示黑屏，但不执行test
-		time.Sleep(time.Second)
+	// 下面这段代码非必须，未来 p.Wait()可能会被重构成process.Wait()，才更符合通用设计
+	go func() {
+		log.Infof("== Wait process:%d begin == ", process.Pid)
+		p.Wait()
+		log.Warnf("== Wait process:%d end:%v==", process.Pid, err)
+	}()
+
+	// FIXME: 实验证明，这里的延迟是必须的，否则xctest进程能拉起，但会有很高概率卡主，并打印日志
+	// entering wait loop for 600.00s with expectations: `requesting ready for testing
+	time.Sleep(time.Second)
+	if t.iOS14 {
 		ok, err := t.authorizeTestSessionWithProcessID(process.Pid)
 		if err != nil {
 			return err
@@ -291,79 +300,85 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 }
 
 func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64, testConfig nskeyedarchiver.XCTestConfiguration) error {
-	var t1, t2 *dvt.TestManagerdSecureService
-	iOS14 := t.tms2.IsSecure()
-	if iOS14 {
-		t1 = t.tms2
-		t2 = t.tms2
-	} else {
-		t1 = t.tms1
-		t2 = t.tms2
+	handleFragment := func(tms *dvt.TestManagerdSecureService) func(f services.Fragment) {
+		return func(f services.Fragment) {
+			ph, data, aux, err := f.ParseEx()
+			log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
+			log.Infoln("    ", data, aux, err)
+
+			ack := f.NeedAck()
+			if len(data) == 0 {
+				log.Panic("unknown reply")
+				return
+			}
+			method, ok := data[0].(string)
+			if !ok {
+				log.Panic("invalid method")
+				return
+			}
+
+			switch method {
+			case "_requestChannelWithCode:identifier:":
+				// aux[0].int
+			case "_notifyOfPublishedCapabilities:":
+			case "_XCT_didBeginExecutingTestPlan":
+			case "_XCT_didBeginInitializingForUITesting":
+			case "_XCT_testSuite:didStartAt:":
+			case "_XCT_testCase:method:willStartActivity:":
+			case "_XCT_testCase:method:didFinishActivity:":
+			case "_XCT_testCaseDidStartForTestClass:method:":
+			case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
+			case "_XCT_logDebugMessage:":
+			case "_XCT_testRunnerReadyWithCapabilities:":
+				ack = false
+				payload, _ := nskeyedarchiver.ArchiveBin(testConfig)
+				buf, _ := dtx.Encode(
+					int(f.Identifier),  // Identifier
+					1,                  // ConversationIndex
+					int(f.ChannelCode), // ChannelCode
+					false,              // ExpectsReply
+					services.ResponseWithReturnValueInPayload, // MessageType
+					payload,                      // payloadBytes
+					dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
+				if err := tms.Conn.Send(buf); err != nil {
+					log.Errorln("Ack failed:")
+					return
+				}
+				log.Infof("%v --> ack", f.ChannelCode)
+			case "_XCT_didFinishExecutingTestPlan":
+			default:
+				log.Warningln(method)
+			}
+
+			if ack {
+				log.Infof("%v --> ack", f.ChannelCode)
+				b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
+				if err := tms.Conn.Send(b); err != nil {
+					log.Errorln("Ack failed:")
+					return
+				}
+			}
+		}
 	}
 
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
-	err := t2.GetXcodeIDEChannel().CallAsync(method, version)
-	if err != nil {
-		log.Errorf("%v: failed:%v", method, err)
-		return err
-	}
+	var err error
 	log.Infof("== RecvLoop: begin ==")
-	err = t1.RecvLoop(func(f services.Fragment) {
-		ph, data, aux, err := f.ParseEx()
-		log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
-		log.Infoln("    ", data, aux, err)
-
-		ack := ph.Flags == services.Ack
-		if len(data) == 0 {
-			log.Panic("unknown reply")
-			return
+	if t.iOS14 {
+		err = t.tms2.GetXcodeIDEChannel().CallAsync(method, version)
+		if err != nil {
+			log.Errorf("%v: failed:%v", method, err)
+			return err
 		}
-		method, ok := data[0].(string)
-		if !ok {
-			log.Panic("invalid method")
-			return
+		err = t.tms2.RecvLoop(handleFragment(t.tms2))
+	} else {
+		err = t.tms1.GetXcodeIDEChannel().CallAsync(method, version)
+		if err != nil {
+			log.Errorf("%v: failed:%v", method, err)
+			return err
 		}
-
-		switch method {
-		case "_requestChannelWithCode:identifier:":
-			// aux[0].int
-		case "_notifyOfPublishedCapabilities:":
-		case "_XCT_didBeginExecutingTestPlan":
-		case "_XCT_didBeginInitializingForUITesting":
-		case "_XCT_testSuite:didStartAt:":
-		case "_XCT_testCase:method:willStartActivity:":
-		case "_XCT_testCase:method:didFinishActivity:":
-		case "_XCT_testCaseDidStartForTestClass:method:":
-		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
-		case "_XCT_logDebugMessage:":
-		case "_XCT_testRunnerReadyWithCapabilities:":
-			ack = false
-			payload, _ := nskeyedarchiver.ArchiveBin(testConfig)
-			buf, _ := dtx.Encode(
-				int(f.Identifier),  // Identifier
-				1,                  // ConversationIndex
-				int(f.ChannelCode), // ChannelCode
-				false,              // ExpectsReply
-				services.ResponseWithReturnValueInPayload, // MessageType
-				payload,                      // payloadBytes
-				dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
-			if err := t1.Conn.Send(buf); err != nil {
-				log.Errorln("Ack failed:")
-				return
-			}
-		case "_XCT_didFinishExecutingTestPlan":
-		default:
-			log.Warningln(method)
-		}
-
-		if ack {
-			b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
-			if err := t1.Conn.Send(b); err != nil {
-				log.Errorln("Ack failed:")
-				return
-			}
-		}
-	})
+		err = t.tms1.RecvLoop(handleFragment(t.tms1))
+	}
 
 	log.Errorf("== RecvLoop: end with %v==", err)
 	return err
