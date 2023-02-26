@@ -117,7 +117,7 @@ func NewXctestRunner(tms1 *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerd
 		tms1:     tms1,
 		tms2:     tms2,
 		device:   tms1.GetDevice(),
-		iOS14:    tms2.IsSecure(),
+		iOS14:    tms1.IsSecure(),
 	}
 	return s, nil
 }
@@ -300,65 +300,57 @@ func (t *XctestRunner) authorizeTestSessionWithProcessID(pid uint64) (bool, erro
 }
 
 func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64, testConfig nskeyedarchiver.XCTestConfiguration) error {
-	handleFragment := func(tms *dvt.TestManagerdSecureService) func(f services.Fragment) {
-		return func(f services.Fragment) {
-			ph, data, aux, err := f.ParseEx()
-			log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
-			log.Infoln("    ", data, aux, err)
+	handleFragment := func(f services.Fragment) ([]byte, bool) {
+		ph, data, aux, err := f.ParseEx()
+		log.Infoln("  ", services.LogDtx(f.DTXMessageHeader, ph))
+		log.Infoln("    ", data, aux, err)
 
-			ack := f.NeedAck()
-			if len(data) == 0 {
-				log.Panic("unknown reply")
-				return
-			}
-			method, ok := data[0].(string)
-			if !ok {
-				log.Panic("invalid method")
-				return
-			}
-
-			switch method {
-			case "_requestChannelWithCode:identifier:":
-				// aux[0].int
-			case "_notifyOfPublishedCapabilities:":
-			case "_XCT_didBeginExecutingTestPlan":
-			case "_XCT_didBeginInitializingForUITesting":
-			case "_XCT_testSuite:didStartAt:":
-			case "_XCT_testCase:method:willStartActivity:":
-			case "_XCT_testCase:method:didFinishActivity:":
-			case "_XCT_testCaseDidStartForTestClass:method:":
-			case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
-			case "_XCT_logDebugMessage:":
-			case "_XCT_testRunnerReadyWithCapabilities:":
-				ack = false
-				payload, _ := nskeyedarchiver.ArchiveBin(testConfig)
-				buf, _ := dtx.Encode(
-					int(f.Identifier),  // Identifier
-					1,                  // ConversationIndex
-					int(f.ChannelCode), // ChannelCode
-					false,              // ExpectsReply
-					services.ResponseWithReturnValueInPayload, // MessageType
-					payload,                      // payloadBytes
-					dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
-				if err := tms.Conn.Send(buf); err != nil {
-					log.Errorln("Ack failed:")
-					return
-				}
-				log.Infof("%v --> ack", f.ChannelCode)
-			case "_XCT_didFinishExecutingTestPlan":
-			default:
-				log.Warningln(method)
-			}
-
-			if ack {
-				log.Infof("%v --> ack", f.ChannelCode)
-				b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
-				if err := tms.Conn.Send(b); err != nil {
-					log.Errorln("Ack failed:")
-					return
-				}
-			}
+		ack := f.NeedAck()
+		if len(data) == 0 {
+			log.Panic("unknown reply")
+			return nil, false
 		}
+		method, ok := data[0].(string)
+		if !ok {
+			log.Panic("invalid method")
+		}
+
+		switch method {
+		case "_requestChannelWithCode:identifier:":
+			// aux[0].int
+		case "_notifyOfPublishedCapabilities:":
+		case "_XCT_didBeginExecutingTestPlan":
+		case "_XCT_didBeginInitializingForUITesting":
+		case "_XCT_testSuite:didStartAt:":
+		case "_XCT_testCase:method:willStartActivity:":
+		case "_XCT_testCase:method:didFinishActivity:":
+		case "_XCT_testCaseDidStartForTestClass:method:":
+		case "_XCT_testBundleReadyWithProtocolVersion:minimumVersion:":
+		case "_XCT_logDebugMessage:":
+		case "_XCT_testRunnerReadyWithCapabilities:":
+			ack = false
+			payload, _ := nskeyedarchiver.ArchiveBin(testConfig)
+			buf, _ := dtx.Encode(
+				int(f.Identifier),  // Identifier
+				1,                  // ConversationIndex
+				int(f.ChannelCode), // ChannelCode
+				false,              // ExpectsReply
+				services.ResponseWithReturnValueInPayload, // MessageType
+				payload,                      // payloadBytes
+				dtx.NewPrimitiveDictionary()) // PrimitiveDictionary
+			log.Infof("%v --> ack", f.ChannelCode)
+			return buf, true
+		case "_XCT_didFinishExecutingTestPlan":
+		default:
+			log.Warningln(method)
+		}
+
+		if ack {
+			log.Infof("%v --> ack", f.ChannelCode)
+			b := services.BuildDtxAck(f.Identifier, f.ConversationIndex, services.ChannelCode(f.ChannelCode))
+			return b, true
+		}
+		return nil, false
 	}
 
 	const method = "_IDE_startExecutingTestPlanWithProtocolVersion:"
@@ -370,14 +362,14 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 			log.Errorf("%v: failed:%v", method, err)
 			return err
 		}
-		err = t.tms2.RecvLoop(handleFragment(t.tms2))
+		err = t.tms2.RecvLoop(handleFragment)
 	} else {
 		err = t.tms1.GetXcodeIDEChannel().CallAsync(method, version)
 		if err != nil {
 			log.Errorf("%v: failed:%v", method, err)
 			return err
 		}
-		err = t.tms1.RecvLoop(handleFragment(t.tms1))
+		err = t.tms1.RecvLoop(handleFragment)
 	}
 
 	log.Errorf("== RecvLoop: end with %v==", err)

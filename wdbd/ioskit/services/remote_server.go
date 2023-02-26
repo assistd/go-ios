@@ -213,7 +213,7 @@ func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
 	}
 }
 
-func (r *RemoteServer) RecvLoop(onFragment func(Fragment)) (err error) {
+func (r *RemoteServer) RecvLoop(onFragment func(Fragment) ([]byte, bool)) (err error) {
 	mheader := DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
 	fMap := make(map[ChannelCode]*Fragment)
@@ -251,7 +251,9 @@ func (r *RemoteServer) RecvLoop(onFragment func(Fragment)) (err error) {
 		log.Infof("[%v]<-- %d:%d, chunk:%v", mheader.ChannelCode, mheader.FragmentId, mheader.FragmentCount, len(chunk))
 		f.Add(mheader, chunk)
 		if f.IsFull() {
-			onFragment(*f)
+			if reply, ok := onFragment(*f); ok {
+				r.Conn.Send(reply)
+			}
 			f.reset()
 		}
 	}
