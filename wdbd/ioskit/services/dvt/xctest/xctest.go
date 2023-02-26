@@ -22,8 +22,6 @@ type XctestRunner struct {
 	channel  services.Channel
 	channel2 services.Channel
 	sps      *dvt.DvtSecureSocketProxyService
-	tms1     *dvt.TestManagerdSecureService
-	tms2     *dvt.TestManagerdSecureService
 	device   ios.DeviceEntry
 	iOS14    bool
 }
@@ -114,8 +112,6 @@ func NewXctestRunner(tms1 *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerd
 		channel:  channel,
 		channel2: channel2,
 		sps:      sps,
-		tms1:     tms1,
-		tms2:     tms2,
 		device:   tms1.GetDevice(),
 		iOS14:    tms1.IsSecure(),
 	}
@@ -357,19 +353,19 @@ func (t *XctestRunner) startExecutingTestPlanWithProtocolVersion(version uint64,
 	var err error
 	log.Infof("== RecvLoop: begin ==")
 	if t.iOS14 {
-		err = t.tms2.GetXcodeIDEChannel().CallAsync(method, version)
+		err = t.channel2.Service().MakeChannelWith(0xFFFFFFFF).CallAsync(method, version)
 		if err != nil {
 			log.Errorf("%v: failed:%v", method, err)
 			return err
 		}
-		err = t.tms2.RecvLoop(handleFragment)
+		err = t.channel2.Service().RecvLoop(handleFragment)
 	} else {
-		err = t.tms1.GetXcodeIDEChannel().CallAsync(method, version)
+		err = t.channel.Service().MakeChannelWith(0xFFFFFFFF).CallAsync(method, version)
 		if err != nil {
 			log.Errorf("%v: failed:%v", method, err)
 			return err
 		}
-		err = t.tms1.RecvLoop(handleFragment)
+		err = t.channel.Service().RecvLoop(handleFragment)
 	}
 
 	log.Errorf("== RecvLoop: end with %v==", err)

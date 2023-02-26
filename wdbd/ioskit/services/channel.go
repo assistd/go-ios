@@ -10,10 +10,6 @@ type Channel struct {
 	value uint32
 }
 
-func BuildChannel(r *RemoteServer, channel uint32) Channel {
-	return Channel{r, channel}
-}
-
 func (c Channel) Call(selector string, args ...interface{}) (Fragment, error) {
 	auxiliary := dtx.NewPrimitiveDictionary()
 	for _, arg := range args {

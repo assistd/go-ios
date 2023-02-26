@@ -151,6 +151,10 @@ func (r *RemoteServer) MakeChannel(identifier string) (Channel, error) {
 	return chanel, nil
 }
 
+func (r *RemoteServer) MakeChannelWith(channel ChannelCode) Channel {
+	return Channel{r, uint32(channel)}
+}
+
 func (r *RemoteServer) RecvChannel(channel ChannelCode) (Fragment, error) {
 	mheader := DTXMessageHeader{}
 	buf := make([]byte, mheader.Length())
