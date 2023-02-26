@@ -3,7 +3,7 @@ package xctest
 import (
 	"errors"
 	"fmt"
-	"path"
+	"strings"
 	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
@@ -27,9 +27,7 @@ type XctestRunner struct {
 }
 
 type XctestAppInfo struct {
-	BundleID             string
-	TestRunnerBundleID   string
-	XctestConfigFileName string
+	BundleID string
 
 	testrunnerAppPath   string
 	testRunnerHomePath  string
@@ -37,9 +35,10 @@ type XctestAppInfo struct {
 	targetAppBundleName string
 	targetAppBundleID   string
 
-	testSessionID uuid.UUID
-	absConfigPath string
-	config        nskeyedarchiver.XCTestConfiguration
+	testSessionID             uuid.UUID
+	testConfigurationFilePath string
+	testBundlePath            string
+	config                    nskeyedarchiver.XCTestConfiguration
 }
 
 func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
@@ -51,7 +50,7 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 	apps, err := insproxy.BrowseUserApps()
 	found := false
 	for _, app := range apps {
-		if app.CFBundleIdentifier == x.TestRunnerBundleID {
+		if app.CFBundleIdentifier == x.BundleID {
 			x.targetAppPath = app.Path
 			x.targetAppBundleName = app.CFBundleName
 			x.targetAppBundleID = app.CFBundleIdentifier
@@ -65,23 +64,24 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 		return errors.New("xctest app not existed!")
 	}
 
-	fsync, err := afc.NewHouseArrestContainerFs(device, x.TestRunnerBundleID)
+	fsync, err := afc.NewHouseArrestContainerFs(device, x.BundleID)
 	if err != nil {
 		return err
 	}
 	defer fsync.Close()
 
 	x.testSessionID = uuid.New()
-	configFilePath := path.Join("tmp", x.testSessionID.String()+".xctestconfiguration")
-	x.absConfigPath = path.Join(x.testRunnerHomePath, configFilePath)
-	testBundleURL := path.Join(x.testrunnerAppPath, "PlugIns", x.XctestConfigFileName)
+	configFilePath := "tmp/" + x.testSessionID.String() + ".xctestconfiguration"
+	x.testConfigurationFilePath = x.testRunnerHomePath + "/" + configFilePath
+	targetName := strings.Split(x.targetAppBundleName, "-")[0]
+	x.testBundlePath = x.testrunnerAppPath + "/PlugIns/" + targetName + ".xctest"
 
 	// FIXME: go-ios的神奇实现，config只能被操作一次
 	//    config := nskeyedarchiver.NewXCTestConfiguration
 	//    nskeyedarchiver.ArchiveXML(config)
 	//    nskeyedarchiver.ArchiveBin(config) <-- 这一句必崩溃
-	x.config = nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, testBundleURL)
-	config := nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, testBundleURL)
+	x.config = nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, x.testBundlePath)
+	config := nskeyedarchiver.NewXCTestConfiguration(x.targetAppBundleName, x.testSessionID, x.targetAppBundleID, x.targetAppPath, x.testBundlePath)
 	configStr, err := nskeyedarchiver.ArchiveXML(config)
 	if err != nil {
 		return err
@@ -95,16 +95,15 @@ func (x *XctestAppInfo) Setup(device ios.DeviceEntry) error {
 
 func NewXctestRunner(tms1 *dvt.TestManagerdSecureService, tms2 *dvt.TestManagerdSecureService, sps *dvt.DvtSecureSocketProxyService) (*XctestRunner, error) {
 	const identifier = "dtxproxy:XCTestManager_IDEInterface:XCTestManager_DaemonConnectionInterface"
-	log.Infoln("xctest-runner: MakeChannel")
 	channel, err := tms1.MakeChannel(identifier)
 	if err != nil {
-		log.Infoln("xctest-runner: ", err)
+		log.Errorln("xctest-runner: ", err)
 		return nil, err
 	}
 
 	channel2, err := tms2.MakeChannel(identifier)
 	if err != nil {
-		log.Infoln("xctest-runner: ", err)
+		log.Errorln("xctest-runner: ", err)
 		return nil, err
 	}
 
@@ -156,16 +155,16 @@ func (t *XctestRunner) Xctest(info XctestAppInfo, env map[string]interface{}, ar
 		return err
 	}
 
-	log.Infoln("XCTestBundlePath", info.testrunnerAppPath+"/PlugIns/"+info.XctestConfigFileName)
-	log.Infoln("XCTestConfigurationFilePath", info.absConfigPath)
+	log.Infoln("XCTestBundlePath", info.testBundlePath)
+	log.Infoln("XCTestConfigurationFilePath", info.testConfigurationFilePath)
 	log.Infoln("XCTestSessionIdentifier", info.testSessionID.String())
 
 	// init args and enviroment vars
 	_args := []interface{}{}
 	_env := map[string]interface{}{
 		"DYLD_INSERT_LIBRARIES":       "/Developer/usr/lib/libMainThreadChecker.dylib",
-		"XCTestBundlePath":            info.testrunnerAppPath + "/PlugIns/" + info.XctestConfigFileName,
-		"XCTestConfigurationFilePath": info.absConfigPath, // info.testRunnerHomePath + /tmp + <session>.xctestconfiguration
+		"XCTestBundlePath":            info.testBundlePath,
+		"XCTestConfigurationFilePath": info.testConfigurationFilePath,
 		"XCTestSessionIdentifier":     info.testSessionID.String(),
 	}
 
