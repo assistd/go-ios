@@ -1,6 +1,8 @@
 package instruments
 
 import (
+	"fmt"
+
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services"
 	"github.com/danielpaulus/go-ios/wdbd/ioskit/services/dvt"
 	log "github.com/sirupsen/logrus"
@@ -35,6 +37,35 @@ func NewProcessControl(dvt *dvt.DvtSecureSocketProxyService) (*ProcessControl, e
 // param start_suspended: Same as WaitForDebugger.
 // param environment: Environment variables to pass to process.
 // return: PID of created process.
+//
+// []interface{}{
+// 	nskeyedarchiver.NSError{
+// 		ErrorCode: 0x2,
+// 		Domain: "com.apple.dt.deviceprocesscontrolservice",
+// 		UserInfo: map[string]interface{} {
+// 			"NSLocalizedDescription": "Request to launch <app> failed.",
+// 			"NSLocalizedFailureReason": "The request to open \"<app>\" failed. : Failed to launch process with bundle identifier '<app>'.",
+// 			"NSUnderlyingError": nskeyedarchiver.NSError{
+// 				ErrorCode: 0x4,
+// 				Domain: "FBSOpenApplicationServiceErrorDomain",
+// 				UserInfo: map[string]interface{}{
+// 					"BSErrorCodeDescription": "InvalidRequest",
+// 					"FBSOpenApplicationRequestID": "0x9784",
+// 					"NSLocalizedDescription": "The request to open \"<app>\" failed.",
+// 					"NSUnderlyingError": nskeyedarchiver.NSError{
+// 						ErrorCode: 0x4,
+// 						Domain: "FBSOpenApplicationErrorDomain",
+// 						UserInfo: map[string]interface{}{
+// 							"BSErrorCodeDescription": "NotFound",
+// 							"NSLocalizedFailureReason": "Application info provider (FBSApplicationLibrary) returned nil for \"<app>\""
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 	},
+// }
+
 func (d *ProcessControl) Launch(bundleId string, env map[string]interface{}, args []interface{}, killExisting, startSuspended bool) (*Process, error) {
 	const path = "/private/"
 	options := map[string]interface{}{
@@ -50,24 +81,25 @@ func (d *ProcessControl) Launch(bundleId string, env map[string]interface{}, arg
 	if args == nil {
 		args = make([]interface{}, 0)
 	}
-
 	f, err := d.channel.Call("launchSuspendedProcessWithDevicePath:bundleIdentifier:environment:arguments:options:",
 		path, bundleId, env, args, options)
 	if err != nil {
 		// 偶现这里返回EOF
-		panic(err)
+		return nil, fmt.Errorf("ps: failed:%v", err)
 	}
 
-	data, aux, err := f.Parse()
-	// log.Infof("proclist: sel=%v, aux=%#v, exWrr=%v", data, aux, err)
+	ph, data, aux, err := f.ParseEx()
 	if err != nil {
-		panic(err)
+		log.Panicf("data:%#v, aux:%#v, err:%v", data, aux, err)
 	}
 
-	log.Infof("data:%#v, aux:%#v, err:%v", data, aux, err)
+	if ph.Error() {
+		return nil, fmt.Errorf("ps failed: %#v", data[0])
+	}
+
 	pid, ok := data[0].(uint64)
 	if !ok {
-		panic("invalid reply")
+		log.Panicf("invalid reply: data:%#v, aux:%#v", data, aux)
 	}
 
 	return &Process{

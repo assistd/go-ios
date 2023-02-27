@@ -61,6 +61,10 @@ func (d *DTXPayloadHeader) Length() int {
 	return 16
 }
 
+func (d *DTXPayloadHeader) Error() bool {
+	return d.Flags == DtxTypeError
+}
+
 // The AuxiliaryHeader can actually be completely ignored. We do not need to care about the buffer size
 // And we already know the AuxiliarySize. The other two ints seem to be always 0 anyway. Could
 // also be that Buffer and Aux Size are Uint64
