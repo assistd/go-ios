@@ -122,6 +122,23 @@ func (d *ProcessControl) Wait() error {
 	return err
 }
 
+func (d *ProcessControl) Kill(pid uint64) error {
+	f, err := d.channel.Call("killPid:", pid)
+	if err != nil {
+		return fmt.Errorf("ps: failed:%v", err)
+	}
+
+	ph, data, aux, err := f.ParseEx()
+	if err != nil {
+		log.Panicf("data:%#v, aux:%#v, err:%v", data, aux, err)
+	}
+
+	if ph.Error() {
+		return fmt.Errorf("ps failed: %#v", data[0])
+	}
+	return nil
+}
+
 func bool2int(v bool) uint64 {
 	if v {
 		return 1
