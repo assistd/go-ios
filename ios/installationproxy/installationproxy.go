@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+
 	ios "github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/afc"
 	log "github.com/sirupsen/logrus"
 	"howett.net/plist"
-	"os"
 )
 
 const serviceName = "com.apple.mobile.installation_proxy"
@@ -108,6 +109,10 @@ func (c *Connection) InstallWithCtx(ctx context.Context, device ios.DeviceEntry,
 	}
 
 	afcService, err := afc.New(device)
+	if err != nil {
+		return err
+	}
+
 	log.Infof("Copying %v to device...", path)
 
 	ipaTmpDir := "PublicStaging"
@@ -121,6 +126,7 @@ func (c *Connection) InstallWithCtx(ctx context.Context, device ios.DeviceEntry,
 	}()
 	if notify != nil {
 		ctx2, cancel := context.WithCancel(ctx)
+		defer cancel()
 		ipaFile, err := os.Stat(path)
 		if err != nil {
 			return err
@@ -135,9 +141,6 @@ func (c *Connection) InstallWithCtx(ctx context.Context, device ios.DeviceEntry,
 		err = afcService.PushWithWriter(path, targetPath, &listener)
 		if err != nil {
 			return err
-		}
-		if cancel != nil {
-			cancel()
 		}
 	} else {
 		err = afcService.Push(path, targetPath)
