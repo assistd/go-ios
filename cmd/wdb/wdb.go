@@ -21,6 +21,11 @@ var udid = flag.String("udid", "", "remote device udid")
 var logDir = flag.String("log-path", "/var/log/wdb", "log directory")
 var mode = flag.String("mode", "wdbd", "wdb wdbd")
 var keepAlive = flag.Bool("keepalive", false, "need keepalive")
+var showVersion = flag.Bool("version", false, "version")
+
+const (
+	version = "v1.1.5"
+)
 
 func initLog(logPath string) {
 	p := logPath + ".%Y%m%d.log"
@@ -49,6 +54,11 @@ func initLog(logPath string) {
 
 func main() {
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	file := *udid
 	if file == "" {
