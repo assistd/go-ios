@@ -212,6 +212,7 @@ type PushListener struct {
 	lastTotalSize uint64
 	IpaFileSize   uint64
 	OverallSize   uint64
+	finishPush    bool
 }
 
 func (u *PushListener) Write(b []byte) (n int, err error) {
@@ -224,6 +225,10 @@ func (u *PushListener) Start(ctx context.Context, notify func(event InstallEvent
 	u.currentSize = 0
 
 	refresh := func(finish bool) {
+		if u.finishPush {
+			return
+		}
+
 		f := float64(u.currentSize) * float64((time.Second.Milliseconds())/DefRefrashRate.Milliseconds())
 		percent := float64(u.lastTotalSize) / float64(u.OverallSize)
 		if finish {
@@ -238,6 +243,7 @@ func (u *PushListener) Start(ctx context.Context, notify func(event InstallEvent
 			Percent: int(percent * 100),
 		})
 		u.currentSize = 0
+		u.finishPush = percent == 1
 	}
 
 	for {
