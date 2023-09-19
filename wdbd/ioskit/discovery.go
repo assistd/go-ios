@@ -12,9 +12,8 @@ import (
 
 var (
 	// cache is a map of device serials to fully resolved bindings.
-	cacheMutex   sync.Mutex
-	cancelMap    = map[int]Ctx{}
-	deviceSerial = make(map[int]string)
+	cacheMutex sync.Mutex
+	cancelMap  = map[int]Ctx{}
 )
 
 type DeviceMonitor interface {
@@ -47,6 +46,7 @@ func attachedMessageToDevice(msg ios.AttachedMessage) ios.DeviceEntry {
 }
 
 func (a *IOSDeviceMonitor) Monitor(ctx context.Context, r *Registry, serial string, interval time.Duration) error {
+	deviceSerial := make(map[int]string)
 	for {
 		c, err := net.Dial(a.Network, a.Addr)
 		if err != nil {
