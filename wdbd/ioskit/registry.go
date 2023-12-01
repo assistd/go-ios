@@ -3,6 +3,7 @@ package ioskit
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/danielpaulus/go-ios/ios"
@@ -151,15 +152,21 @@ func (r *Registry) AddDevice(ctx context.Context, d DeviceEntry) {
 func (r *Registry) RemoveDevice(ctx context.Context, d DeviceEntry) {
 	r.Lock()
 	defer r.Unlock()
+	deleteIndex := make([]int, 0)
 	for i, t := range r.devices {
 		if t.DeviceID == d.DeviceID || t.Properties.SerialNumber == d.Properties.SerialNumber {
+			deleteIndex = append(deleteIndex, i)
 			log.Info("Removing existing device")
-			copy(r.devices[i:], r.devices[i+1:])
-			r.devices = r.devices[:len(r.devices)-1]
 			for l := range r.listeners {
 				l.OnDeviceRemoved(ctx, d)
 			}
 		}
+	}
+	sort.Slice(deleteIndex, func(i, j int) bool {
+		return deleteIndex[i] > deleteIndex[j]
+	})
+	for _, index := range deleteIndex {
+		r.devices = append(r.devices[:index], r.devices[index+1:]...)
 	}
 }
 
